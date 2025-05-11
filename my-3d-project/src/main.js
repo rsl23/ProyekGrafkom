@@ -1,7 +1,7 @@
-import * as THREE from 'three';
-import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
+import * as THREE from "three";
+import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 
-const canvas = document.getElementById('bg');
+const canvas = document.getElementById("bg");
 const renderer = new THREE.WebGLRenderer({ canvas });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -27,10 +27,34 @@ scene.add(dirLight);
 
 // Floor
 const floorGeo = new THREE.PlaneGeometry(100, 100);
-const floorMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+
+// Load grass texture
+const grassTexture = new THREE.TextureLoader().load("./public/grass.jpg");
+
+// Update floor material to use grass texture
+const floorMat = new THREE.MeshStandardMaterial({ map: grassTexture });
+
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
+
+// Create a grid of smaller grass panels
+const panelSize = 10;
+const gridSize = 10;
+
+for (let i = -gridSize / 2; i < gridSize / 2; i++) {
+  for (let j = -gridSize / 2; j < gridSize / 2; j++) {
+    const panelGeo = new THREE.PlaneGeometry(panelSize, panelSize);
+    const panelMat = new THREE.MeshStandardMaterial({ map: grassTexture });
+    const panel = new THREE.Mesh(panelGeo, panelMat);
+    panel.rotation.x = -Math.PI / 2;
+    panel.position.set(i * panelSize, 0, j * panelSize);
+    scene.add(panel);
+  }
+}
+
+// Remove the original large floor
+scene.remove(floor);
 
 // Rumah sederhana
 const houseGeo = new THREE.BoxGeometry(5, 3, 5);
@@ -43,27 +67,57 @@ scene.add(house);
 const controls = new PointerLockControls(camera, document.body);
 scene.add(controls.getObject());
 
-document.addEventListener('click', () => {
+document.addEventListener("click", () => {
   controls.lock();
 });
 
 // Movement
 const keys = {};
-document.addEventListener('keydown', e => keys[e.code] = true);
-document.addEventListener('keyup', e => keys[e.code] = false);
+document.addEventListener("keydown", (e) => (keys[e.code] = true));
+document.addEventListener("keyup", (e) => (keys[e.code] = false));
+
+// Add jump functionality
+let velocityY = 0;
+const gravity = -9.8;
+const jumpStrength = 5;
+let isOnGround = true;
+
+function handleJump(delta) {
+  if (!isOnGround) {
+    velocityY += gravity * delta;
+    controls.getObject().position.y += velocityY * delta;
+
+    if (controls.getObject().position.y <= 1.6) {
+      // Reset to ground level
+      controls.getObject().position.y = 1.6;
+      velocityY = 0;
+      isOnGround = true;
+    }
+  }
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && isOnGround) {
+    velocityY = jumpStrength;
+    isOnGround = false;
+  }
+});
 
 const clock = new THREE.Clock();
 
+// Update animate function to include jump handling
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   const speed = 5 * delta;
 
   if (controls.isLocked) {
-    if (keys['KeyW']) controls.moveForward(speed);
-    if (keys['KeyS']) controls.moveForward(-speed);
-    if (keys['KeyA']) controls.moveRight(-speed);
-    if (keys['KeyD']) controls.moveRight(speed);
+    if (keys["KeyW"]) controls.moveForward(speed);
+    if (keys["KeyS"]) controls.moveForward(-speed);
+    if (keys["KeyA"]) controls.moveRight(-speed);
+    if (keys["KeyD"]) controls.moveRight(speed);
+
+    handleJump(delta);
   }
 
   renderer.render(scene, camera);
@@ -71,7 +125,7 @@ function animate() {
 animate();
 
 // Resize handler
-window.addEventListener('resize', () => {
+window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
