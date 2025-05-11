@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const canvas = document.getElementById("bg");
 const renderer = new THREE.WebGLRenderer({ canvas });
@@ -7,7 +8,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000033); // Change the scene background to a night color
+scene.background = new THREE.Color(0xa0c8f0); // Change the scene background to a bright color
 
 // Camera
 const camera = new THREE.PerspectiveCamera(
@@ -20,13 +21,13 @@ camera.position.set(0, 1.6, 5);
 
 // Lights
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
-ambientLight.intensity = 0.1; // Adjust ambient light for night
-ambientLight.color.set(0x111111);
+ambientLight.intensity = 0.8; // Adjust ambient light for daytime
+ambientLight.color.set(0xffffff);
 scene.add(ambientLight);
 
 const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-dirLight.intensity = 0.3; // Adjust directional light for night
-dirLight.color.set(0x666699);
+dirLight.intensity = 1.5; // Adjust directional light for daytime
+dirLight.color.set(0xffffff);
 dirLight.position.set(5, 10, 7.5);
 dirLight.castShadow = true;
 scene.add(dirLight);
@@ -62,12 +63,31 @@ for (let i = -gridSize / 2; i < gridSize / 2; i++) {
 // Remove the original large floor
 scene.remove(floor);
 
-// Rumah sederhana
-const houseGeo = new THREE.BoxGeometry(5, 3, 5);
-const houseMat = new THREE.MeshStandardMaterial({ color: 0xa0522d });
-const house = new THREE.Mesh(houseGeo, houseMat);
-house.position.set(0, 1.5, -10);
-scene.add(house);
+// Add bounding box for stairs
+let stairsBoundingBox;
+
+// Load 3D house model with error handling
+const loader = new GLTFLoader();
+loader.load(
+  "./public/House.glb",
+  (gltf) => {
+    const houseModel = gltf.scene;
+    houseModel.position.set(0, 2, -10); // Position the house
+    houseModel.scale.set(20, 20, 20); // Double the size of the house
+    scene.add(houseModel);
+
+    // Assuming stairs are part of the house model, calculate bounding box
+    stairsBoundingBox = new THREE.Box3().setFromObject(
+      houseModel.getObjectByName("Stairs")
+    );
+
+    console.log("House model loaded successfully");
+  },
+  undefined,
+  (error) => {
+    console.error("An error occurred while loading the house model:", error);
+  }
+);
 
 // Pointer Lock Controls
 const controls = new PointerLockControls(camera, document.body);
@@ -111,7 +131,22 @@ document.addEventListener("keydown", (e) => {
 
 const clock = new THREE.Clock();
 
-// Update animate function to include jump handling
+function handleStairsCollision() {
+  if (stairsBoundingBox) {
+    const playerPosition = controls.getObject().position;
+    if (
+      playerPosition.x >= stairsBoundingBox.min.x &&
+      playerPosition.x <= stairsBoundingBox.max.x &&
+      playerPosition.z >= stairsBoundingBox.min.z &&
+      playerPosition.z <= stairsBoundingBox.max.z
+    ) {
+      // Adjust player's height to simulate climbing stairs
+      playerPosition.y = Math.max(playerPosition.y, stairsBoundingBox.max.y);
+    }
+  }
+}
+
+// Update animate function to include jump handling and stairs collision handling
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
@@ -124,6 +159,7 @@ function animate() {
     if (keys["KeyD"]) controls.moveRight(speed);
 
     handleJump(delta);
+    handleStairsCollision();
   }
 
   renderer.render(scene, camera);
