@@ -66,59 +66,55 @@ scene.remove(floor);
 // Ubah batas map menjadi lebih kecil
 const mapBoundary = 30; // Map dari -30 sampai 30 pada sumbu x dan z
 const fenceHeight = 1;
-const fenceLength = 0.4; // panjang fence = 60
+const fenceLength = 0.4; // panjang fence awal
 
 // Faktor skala untuk mengecilkan model fence_1.glb
 const fenceModelScale = 0.2;
 const adjustedFenceHeight = fenceHeight * fenceModelScale;
 const adjustedFenceLength = fenceLength * fenceModelScale;
 
+// Ubah jarak antar segmen fence dengan meningkatkan nilai step
+const step = adjustedFenceLength * 22; // peningkatan jarak antar segmen
+
 const fenceLoader = new GLTFLoader();
 fenceLoader.load(
   "./public/fence_1.glb",
   (gltf) => {
     const fenceModel = gltf.scene;
-    // North fence (bagian utara)
-    const northFence = fenceModel.clone();
-    northFence.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale
-    );
-    northFence.position.set(0, adjustedFenceHeight / 2, -mapBoundary);
-    scene.add(northFence);
 
-    // South fence (bagian selatan)
-    const southFence = fenceModel.clone();
-    southFence.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale
-    );
-    southFence.position.set(0, adjustedFenceHeight / 2, mapBoundary);
-    scene.add(southFence);
-
-    // East fence (bagian timur)
-    const eastFence = fenceModel.clone();
-    eastFence.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale
-    );
-    eastFence.rotation.y = Math.PI / 2;
-    eastFence.position.set(mapBoundary, adjustedFenceHeight / 2, 0);
-    scene.add(eastFence);
-
-    // West fence (bagian barat)
-    const westFence = fenceModel.clone();
-    westFence.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale
-    );
-    westFence.rotation.y = Math.PI / 2;
-    westFence.position.set(-mapBoundary, adjustedFenceHeight / 2, 0);
-    scene.add(westFence);
+    // North side
+    for (let x = -mapBoundary + step / 2; x < mapBoundary; x += step) {
+      const segment = fenceModel.clone();
+      segment.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+      segment.position.set(x, adjustedFenceHeight / 2, -mapBoundary);
+      scene.add(segment);
+    }
+    
+    // South side
+    for (let x = -mapBoundary + step / 2; x < mapBoundary; x += step) {
+      const segment = fenceModel.clone();
+      segment.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+      segment.position.set(x, adjustedFenceHeight / 2, mapBoundary);
+      scene.add(segment);
+    }
+    
+    // East side
+    for (let z = -mapBoundary + step / 2; z < mapBoundary; z += step) {
+      const segment = fenceModel.clone();
+      segment.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+      segment.rotation.y = Math.PI / 2;
+      segment.position.set(mapBoundary, adjustedFenceHeight / 2, z);
+      scene.add(segment);
+    }
+    
+    // West side
+    for (let z = -mapBoundary + step / 2; z < mapBoundary; z += step) {
+      const segment = fenceModel.clone();
+      segment.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+      segment.rotation.y = Math.PI / 2;
+      segment.position.set(-mapBoundary, adjustedFenceHeight / 2, z);
+      scene.add(segment);
+    }
   },
   undefined,
   (error) => {
