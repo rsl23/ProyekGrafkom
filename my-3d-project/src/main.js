@@ -21,16 +21,21 @@ camera.position.set(0, 1.6, 5); // Spawn user outside the fence
 
 // Lights
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
-ambientLight.intensity = 0.2; // Dimmer light
+ambientLight.intensity = 0.05; // Almost no ambient light
 ambientLight.color.set(0x404040); // Softer, cooler light
 scene.add(ambientLight);
 
+// Set all main lights to zero so the scene is dark except for flashlight
 const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-dirLight.intensity = 0.5; // Lower intensity
-dirLight.color.set(0x666699); // Cooler, dimmer light
+dirLight.intensity = 0; // Turn off to make the flashlight more dramatic
 dirLight.position.set(5, 10, 7.5);
 dirLight.castShadow = true;
 scene.add(dirLight);
+
+// Additional Directional Light (turned off for flashlight effect)
+const additionalDirLight = new THREE.DirectionalLight(0xffffff, 0);
+additionalDirLight.position.set(-10, 15, -10);
+scene.add(additionalDirLight);
 
 // Floor (luar rumah)
 const floorGeo = new THREE.PlaneGeometry(1000, 1000);
@@ -303,6 +308,68 @@ function handleStairsCollision() {
   }
 }
 
+// Flashlight (Spotlight)
+const flashlight = new THREE.SpotLight(0xffffff, 3, 20, Math.PI / 12, 0.95, 2);
+flashlight.position.copy(camera.position);
+flashlight.target.position.set(
+  camera.position.x + camera.getWorldDirection(new THREE.Vector3()).x * 10,
+  camera.position.y + camera.getWorldDirection(new THREE.Vector3()).y * 10,
+  camera.position.z + camera.getWorldDirection(new THREE.Vector3()).z * 10
+);
+flashlight.castShadow = true;
+scene.add(flashlight);
+scene.add(flashlight.target);
+
+// Add a small yellow point light to simulate bulb glow at the flashlight position
+const flashlightBulb = new THREE.PointLight(0xffffaa, 0.5, 3);
+flashlightBulb.position.copy(camera.position);
+scene.add(flashlightBulb);
+
+// Flashlight toggle state
+let flashlightOn = true;
+
+// Add F key for toggling flashlight
+document.addEventListener("keydown", (e) => {
+  if (e.code === "KeyF") {
+    flashlightOn = !flashlightOn;
+    if (flashlightOn) {
+      flashlight.intensity = 3;
+      flashlightBulb.intensity = 0.5;
+    } else {
+      flashlight.intensity = 0;
+      flashlightBulb.intensity = 0;
+    }
+  }
+});
+
+// Update flashlight position and target in the animate function
+function updateFlashlight() {
+  if (flashlightOn) {
+    // Position the flashlight at camera position
+    flashlight.position.copy(camera.position);
+
+    // Get camera direction as a normalized vector
+    const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
+
+    // Set target position 10 units ahead in camera direction
+    flashlight.target.position.set(
+      camera.position.x + cameraDirection.x * 10,
+      camera.position.y + cameraDirection.y * 10,
+      camera.position.z + cameraDirection.z * 10
+    );
+
+    // Update bulb position with slight offset to appear in front of camera
+    flashlightBulb.position.set(
+      camera.position.x + cameraDirection.x * 0.5,
+      camera.position.y + cameraDirection.y * 0.5 - 0.2, // Slightly below camera
+      camera.position.z + cameraDirection.z * 0.5
+    );
+  }
+}
+
+// Call updateFlashlight in the animate function
+updateFlashlight();
+
 // Update animate function to include jump handling, stairs collision handling, and fence collision handling
 function animate() {
   requestAnimationFrame(animate);
@@ -318,6 +385,7 @@ function animate() {
     handleJump(delta);
     handleStairsCollision();
     handleFenceCollision();
+    updateFlashlight();
   }
 
   renderer.render(scene, camera);
