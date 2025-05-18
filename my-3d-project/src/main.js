@@ -202,7 +202,6 @@ fenceLoader.load(
   }
 );
 
-
 // Fungsi untuk menangani collision fence dengan cara membatasi posisi pemain
 function handleFenceCollision() {
   const playerPos = controls.getObject().position;
@@ -398,7 +397,6 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   const speed = 5 * delta;
-
   if (controls.isLocked) {
     if (keys["KeyW"]) controls.moveForward(speed);
     if (keys["KeyS"]) controls.moveForward(-speed);
@@ -408,6 +406,7 @@ function animate() {
     handleJump(delta);
     handleStairsCollision();
     handleFenceCollision();
+    handleSofaCollision(); // Add sofa collision handling
     updateFlashlight();
   }
 
@@ -424,6 +423,8 @@ window.addEventListener("resize", () => {
 
 // Sofa
 const sofaLoader = new GLTFLoader();
+let sofaBoundingBox; // Variable to store sofa bounding box
+
 sofaLoader.load(
   "./public/sofa_web.glb",
   (gltf) => {
@@ -431,9 +432,81 @@ sofaLoader.load(
     sofaModel.position.set(0, 0, 5); // Place the sofa at the user's spawn position
     sofaModel.scale.set(0.003, 0.003, 0.003); // Reduce the scale of the sofa
     scene.add(sofaModel);
+    // Create bounding box for sofa
+    sofaBoundingBox = new THREE.Box3().setFromObject(sofaModel);
+
+    // Add visual helper for the bounding box (for debugging)
+    // const boxHelper = new THREE.Box3Helper(sofaBoundingBox, 0xff0000);
+    // scene.add(boxHelper);
+
+    // Add a small buffer around the sofa (making collision area slightly larger)
+    sofaBoundingBox.min.x -= 0.5;
+    sofaBoundingBox.min.z -= 0.5;
+    sofaBoundingBox.max.x += 0.5;
+    sofaBoundingBox.max.z += 0.5;
+
+    console.log(
+      "Sofa model loaded successfully with collision bounds:",
+      sofaBoundingBox
+    );
   },
   undefined,
   (error) => {
     console.error("Error loading sofa asset:", error);
   }
 );
+
+// Function to handle sofa collision
+function handleSofaCollision() {
+  if (sofaBoundingBox) {
+    const playerPosition = controls.getObject().position;
+    const prevPosition = {
+      x: playerPosition.x,
+      z: playerPosition.z,
+    };
+
+    // Check if player is within sofa bounding box (x and z axes only)
+    if (
+      playerPosition.x >= sofaBoundingBox.min.x &&
+      playerPosition.x <= sofaBoundingBox.max.x &&
+      playerPosition.z >= sofaBoundingBox.min.z &&
+      playerPosition.z <= sofaBoundingBox.max.z
+    ) {
+      // Calculate direction vector from sofa center to player
+      const sofaCenter = new THREE.Vector3();
+      sofaBoundingBox.getCenter(sofaCenter);
+
+      const directionX = playerPosition.x - sofaCenter.x;
+      const directionZ = playerPosition.z - sofaCenter.z;
+
+      // Normalize direction
+      const length = Math.sqrt(
+        directionX * directionX + directionZ * directionZ
+      );
+      const normalizedDirX = directionX / length;
+      const normalizedDirZ = directionZ / length;
+
+      // Push player outside the bounding box
+      const pushDistance = 0.5; // Distance to push player away
+      playerPosition.x =
+        sofaCenter.x +
+        (normalizedDirX * (sofaBoundingBox.max.x - sofaBoundingBox.min.x)) / 2 +
+        normalizedDirX * pushDistance;
+      playerPosition.z =
+        sofaCenter.z +
+        (normalizedDirZ * (sofaBoundingBox.max.z - sofaBoundingBox.min.z)) / 2 +
+        normalizedDirZ * pushDistance;
+
+      // If player is stuck, just restore previous position
+      if (
+        playerPosition.x >= sofaBoundingBox.min.x &&
+        playerPosition.x <= sofaBoundingBox.max.x &&
+        playerPosition.z >= sofaBoundingBox.min.z &&
+        playerPosition.z <= sofaBoundingBox.max.z
+      ) {
+        playerPosition.x = prevPosition.x;
+        playerPosition.z = prevPosition.z;
+      }
+    }
+  }
+}
