@@ -418,7 +418,7 @@ function handleStairsCollision() {
 }
 
 // Flashlight (Spotlight) - dimodifikasi agar lebih besar dan lebih terang
-const flashlight = new THREE.SpotLight(0xffffff, 20, 40, Math.PI / 8, 0.95, 2);
+const flashlight = new THREE.SpotLight(0xffffff, 40, 80, Math.PI / 8, 0.95, 1.7);
 flashlight.position.copy(camera.position);
 flashlight.target.position.set(
   camera.position.x + camera.getWorldDirection(new THREE.Vector3()).x * 10,
@@ -523,5 +523,46 @@ sofaLoader.load(
   undefined,
   (error) => {
     console.error("Error loading sofa asset:", error);
+  }
+);
+
+const tvLoader = new GLTFLoader();
+tvLoader.load(
+  "./public/tv.glb",
+  (gltf) => {
+    const tvModel = gltf.scene;
+    // Letakkan tv di depan sofa dengan jarak yang cukup
+    tvModel.position.set(5, 3, 7);
+    // Sesuaikan scale sesuai ukuran model
+    tvModel.scale.set(2, 2, 2);
+    // Agar tv menghadap ke arah sofa di posisi (0, 0, 5),
+    // gunakan metode lookAt dengan target posisi sofa
+    tvModel.lookAt(new THREE.Vector3(3, 2, 1));
+    scene.add(tvModel);
+    
+    // Membuat video element dan texture
+    const video = document.createElement('video');
+    video.src = "./public/videoTes.mp4";  // Ganti dengan path video yang sesuai
+    video.crossOrigin = "anonymous";
+    video.loop = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.play();
+    
+    const videoTexture = new THREE.VideoTexture(video);
+    videoTexture.minFilter = THREE.LinearFilter;
+    videoTexture.magFilter = THREE.LinearFilter;
+    videoTexture.format = THREE.RGBFormat;
+    
+    // Asumsikan mesh layar memiliki nama "Screen". Jika tidak, Anda harus menyesuaikan
+    tvModel.traverse((child) => {
+      if (child.isMesh && child.name.toLowerCase().includes("screen")) {
+        child.material = new THREE.MeshBasicMaterial({ map: videoTexture });
+      }
+    });
+  },
+  undefined,
+  (error) => {
+    console.error("Error loading tv asset:", error);
   }
 );
