@@ -178,7 +178,7 @@ fenceLoader.load(
         fenceModelScale
       );
       segment.rotation.y = Math.PI / 2;
-      segment.position.set(-mapBoundary, adjustedFenceHeight / 2, z);
+      segment.position.set(-mapBoundary2, adjustedFenceHeight / 2, z);
       scene.add(segment);
     }
     // Add half-size fence at the end of West side
@@ -201,6 +201,7 @@ fenceLoader.load(
     console.error("Terjadi error saat memuat fence:", error);
   }
 );
+
 
 // Fungsi untuk menangani collision fence dengan cara membatasi posisi pemain
 function handleFenceCollision() {
@@ -229,13 +230,35 @@ function handleFenceCollision() {
 let stairsBoundingBox;
 
 // // Load 3D house model with error handling
-// const loader = new GLTFLoader();
-// loader.load(
-//   "./public/House.glb",
+const loader = new GLTFLoader();
+loader.load(
+  "./public/grave.glb",
+  (gltf) => {
+    const houseModel = gltf.scene;
+    houseModel.position.set(-20, 0, -26); // Position the house
+    houseModel.scale.set(0.5, 0.5, 0.5); // Double the size of the house
+    scene.add(houseModel);
+
+    // Assuming stairs are part of the house model, calculate bounding box
+    stairsBoundingBox = new THREE.Box3().setFromObject(
+      houseModel.getObjectByName("Stairs")
+    );
+
+    console.log("House model loaded successfully");
+  },
+  undefined,
+  (error) => {
+    console.error("An error occurred while loading the house model:", error);
+  }
+);
+
+// const loa = new GLTFLoader();
+// loa.load(
+//   "./public/spooky_fetch.glb",
 //   (gltf) => {
 //     const houseModel = gltf.scene;
-//     houseModel.position.set(0, 2, -10); // Position the house
-//     houseModel.scale.set(20, 20, 20); // Double the size of the house
+//     houseModel.position.set(-10, 0, -26); // Position the house
+//     houseModel.scale.set(0.5, 0.5, 0.5); // Double the size of the house
 //     scene.add(houseModel);
 
 //     // Assuming stairs are part of the house model, calculate bounding box
