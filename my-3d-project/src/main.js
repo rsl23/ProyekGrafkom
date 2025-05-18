@@ -197,6 +197,92 @@ fenceLoader.load(
   }
 );
 
+// Tambahkan array global untuk menyimpan bounding box grave
+const graveCollisionBoxes = [];
+
+const graveyardLoader = new GLTFLoader();
+graveyardLoader.load(
+  "./public/grave.glb",
+  (gltf) => {
+    const graveModel = gltf.scene;
+    // Ubah rentang graveyard agar lebih sempit (pastikan didalam mapBoundary yang = 30)
+    const startX = -25, endX = -14;
+    const startZ = -22, endZ = -12;
+    // Tingkatkan jumlah baris dan kolom agar jaraknya jadi lebih rapat
+    const rows = 4;
+    const cols = 5;
+    const xStep = (endX - startX) / (cols - 1);
+    const zStep = (endZ - startZ) / (rows - 1);
+
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        const graveInstance = graveModel.clone();
+        graveInstance.position.set(startX + j * xStep, 0, startZ + i * zStep);
+        // Variasi rotasi untuk kesan natural
+        graveInstance.rotation.y = Math.random() * Math.PI * 2;
+        // Sesuaikan scale jika diperlukan
+        graveInstance.scale.set(0.5, 0.5, 0.5);
+        // Pastikan grave berada di dalam mapBoundary
+        if (
+          graveInstance.position.x >= -mapBoundary &&
+          graveInstance.position.x <= mapBoundary &&
+          graveInstance.position.z >= -mapBoundary &&
+          graveInstance.position.z <= mapBoundary
+        ) {
+          scene.add(graveInstance);
+          // Buat bounding box dan expand sumbu Y agar mencakup posisi pemain (misal sampai y=2)
+          const box = new THREE.Box3().setFromObject(graveInstance);
+          box.expandByVector(new THREE.Vector3(0, 2, 0));
+          graveCollisionBoxes.push(box);
+        }
+      }
+    }
+    console.log("Graveyard loaded successfully");
+  },
+  undefined,
+  (error) => {
+    console.error("Terjadi error saat memuat graveyard:", error);
+  }
+);
+
+// Fungsi untuk menangani collision graveyard
+function handleGraveCollision(previousPos) {
+  const playerPos = controls.getObject().position;
+  const newPos = playerPos.clone();
+
+  graveCollisionBoxes.forEach((box) => {
+    // Cek collision 2D (sumbu X dan Z)
+    if (
+      newPos.x >= box.min.x &&
+      newPos.x <= box.max.x &&
+      newPos.z >= box.min.z &&
+      newPos.z <= box.max.z
+    ) {
+      // Hitung pusat dan setengah ukuran (extent) pada sumbu X dan Z
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      const halfSizeX = (box.max.x - box.min.x) / 2;
+      const halfSizeZ = (box.max.z - box.min.z) / 2;
+      
+      // Selisih dari pusat box
+      const dx = newPos.x - center.x;
+      const dz = newPos.z - center.z;
+      
+      const overlapX = halfSizeX - Math.abs(dx);
+      const overlapZ = halfSizeZ - Math.abs(dz);
+      
+      // Resolusi: kembalikan sumbu dengan penetrasi lebih sedikit agar pemain bisa "slide"
+      if (overlapX < overlapZ) {
+        // Kembalikan pergerakan pada sumbu X, biarkan Z tetap untuk slide
+        newPos.x = previousPos.x;
+      } else {
+        // Kembalikan pergerakan pada sumbu Z
+        newPos.z = previousPos.z;
+      }
+    }
+  });
+  controls.getObject().position.copy(newPos);
+}
 
 // Fungsi untuk menangani collision fence dengan cara membatasi posisi pemain
 function handleFenceCollision() {
@@ -326,13 +412,15 @@ function handleStairsCollision() {
   }
 }
 
-// Update animate function to include jump handling, stairs collision handling, and fence collision handling
+// Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   const speed = 5 * delta;
 
   if (controls.isLocked) {
+    const previousPos = controls.getObject().position.clone();
+
     if (keys["KeyW"]) controls.moveForward(speed);
     if (keys["KeyS"]) controls.moveForward(-speed);
     if (keys["KeyA"]) controls.moveRight(-speed);
@@ -341,6 +429,7 @@ function animate() {
     handleJump(delta);
     handleStairsCollision();
     handleFenceCollision();
+    handleGraveCollision(previousPos);
   }
 
   renderer.render(scene, camera);
