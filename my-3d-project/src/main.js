@@ -77,7 +77,7 @@ const fenceLoader = new GLTFLoader();
 fenceLoader.load(
   "./public/fence_1.glb",
   (gltf) => {
-    const fenceModel = gltf.swcene;
+    const fenceModel = gltf.scene;
     // North fence (bagian utara)
     const northFence = fenceModel.clone();
     northFence.scale.set(
