@@ -417,8 +417,8 @@ function handleStairsCollision() {
   }
 }
 
-// Flashlight (Spotlight)
-const flashlight = new THREE.SpotLight(0xffffff, 3, 20, Math.PI / 12, 0.95, 2);
+// Flashlight (Spotlight) - dimodifikasi agar lebih besar dan lebih terang
+const flashlight = new THREE.SpotLight(0xffffff, 20, 40, Math.PI / 8, 0.95, 2);
 flashlight.position.copy(camera.position);
 flashlight.target.position.set(
   camera.position.x + camera.getWorldDirection(new THREE.Vector3()).x * 10,
@@ -429,8 +429,8 @@ flashlight.castShadow = true;
 scene.add(flashlight);
 scene.add(flashlight.target);
 
-// Add a small yellow point light to simulate bulb glow at the flashlight position
-const flashlightBulb = new THREE.PointLight(0xffffaa, 0.5, 3);
+// Update flashlightBulb (simulasi glow) - lebih besar dan lebih terang
+const flashlightBulb = new THREE.PointLight(0xffffaa, 1, 5);
 flashlightBulb.position.copy(camera.position);
 scene.add(flashlightBulb);
 
@@ -476,9 +476,6 @@ function updateFlashlight() {
   }
 }
 
-// Call updateFlashlight in the animate function
-updateFlashlight();
-
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
   requestAnimationFrame(animate);
@@ -496,7 +493,11 @@ function animate() {
     handleJump(delta);
     handleStairsCollision();
     handleFenceCollision();
+    handleGraveCollision(previousPos);
   }
+  
+  // Update flashlight position and target every frame
+  updateFlashlight();
 
   renderer.render(scene, camera);
 }
