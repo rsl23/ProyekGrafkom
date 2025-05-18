@@ -64,7 +64,7 @@ for (let i = -gridSize / 2; i < gridSize / 2; i++) {
 scene.remove(floor);
 
 // Ubah batas map menjadi lebih kecil
-const mapBoundary = 30; // Map dari -30 sampai 30 pada sumbu x dan z
+const mapBoundary = 50; // Map dari -30 sampai 30 pada sumbu x dan z
 const fenceHeight = 1;
 const fenceLength = 0.4; // panjang fence = 60
 
