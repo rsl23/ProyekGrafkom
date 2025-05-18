@@ -8,7 +8,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xa0c8f0); // Change the scene background to a bright color
+scene.background = new THREE.Color(0x000033); // Dark blue for night
 
 // Camera
 const camera = new THREE.PerspectiveCamera(
@@ -17,17 +17,17 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-camera.position.set(0, 1.6, 5);
+camera.position.set(0, 1.6, 5); // Spawn user outside the fence
 
 // Lights
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
-ambientLight.intensity = 0.8; // Adjust ambient light for daytime
-ambientLight.color.set(0xffffff);
+ambientLight.intensity = 0.2; // Dimmer light
+ambientLight.color.set(0x404040); // Softer, cooler light
 scene.add(ambientLight);
 
 const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-dirLight.intensity = 1.5; // Adjust directional light for daytime
-dirLight.color.set(0xffffff);
+dirLight.intensity = 0.5; // Lower intensity
+dirLight.color.set(0x666699); // Cooler, dimmer light
 dirLight.position.set(5, 10, 7.5);
 dirLight.castShadow = true;
 scene.add(dirLight);
@@ -64,7 +64,7 @@ for (let i = -gridSize / 2; i < gridSize / 2; i++) {
 scene.remove(floor);
 
 // Ubah batas map menjadi lebih kecil
-const mapBoundary = 50; // Map dari -30 sampai 30 pada sumbu x dan z
+const mapBoundary = 30; // Map dari -30 sampai 30 pada sumbu x dan z
 const fenceHeight = 1;
 const fenceLength = 0.4;
 const fenceModelScale = 0.2;
@@ -73,7 +73,7 @@ const adjustedFenceHeight = fenceHeight * fenceModelScale;
 const adjustedFenceLength = fenceLength * fenceModelScale;
 
 // Atur jumlah fence yang lebih sedikit (misalnya hanya 12 per sisi)
-const segmentCount = 34;
+const segmentCount = 35;
 const totalLength = mapBoundary * 2;
 const step = totalLength / segmentCount;
 
@@ -87,39 +87,109 @@ fenceLoader.load(
     for (let i = 0; i < segmentCount; i++) {
       const x = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
-      segment.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
-      segment.position.set(x, adjustedFenceHeight / 2, -mapBoundary);
+      segment.scale.set(
+        adjustedFenceLength,
+        adjustedFenceHeight,
+        fenceModelScale
+      );
+      segment.position.set(x, adjustedFenceHeight / 2, -mapBoundary + 1);
       scene.add(segment);
     }
+    // Add half-size fence at the end of North side
+    const northHalfSegment = fenceModel.clone();
+    northHalfSegment.scale.set(
+      adjustedFenceLength / 2,
+      adjustedFenceHeight,
+      fenceModelScale
+    );
+    northHalfSegment.position.set(
+      mapBoundary,
+      adjustedFenceHeight / 2,
+      -mapBoundary + 1
+    );
+    scene.add(northHalfSegment);
 
     // South side
     for (let i = 0; i < segmentCount; i++) {
       const x = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
-      segment.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
-      segment.position.set(x, adjustedFenceHeight / 2, mapBoundary);
+      segment.scale.set(
+        adjustedFenceLength,
+        adjustedFenceHeight,
+        fenceModelScale
+      );
+      segment.position.set(x, adjustedFenceHeight / 2, mapBoundary + 1);
       scene.add(segment);
     }
+    // Add half-size fence at the end of South side
+    const southHalfSegment = fenceModel.clone();
+    southHalfSegment.scale.set(
+      adjustedFenceLength / 2,
+      adjustedFenceHeight,
+      fenceModelScale
+    );
+    southHalfSegment.position.set(
+      mapBoundary,
+      adjustedFenceHeight / 2,
+      mapBoundary + 1
+    );
+    scene.add(southHalfSegment);
 
     // East side
-    for (let i = 0; i < segmentCount; i++) {
+    for (let i = -1; i <= segmentCount; i++) {
       const z = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
-      segment.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+      segment.scale.set(
+        adjustedFenceLength,
+        adjustedFenceHeight,
+        fenceModelScale
+      );
       segment.rotation.y = Math.PI / 2;
       segment.position.set(mapBoundary, adjustedFenceHeight / 2, z);
       scene.add(segment);
     }
+    // Add half-size fence at the end of East side
+    const eastHalfSegment = fenceModel.clone();
+    eastHalfSegment.scale.set(
+      adjustedFenceLength,
+      adjustedFenceHeight,
+      fenceModelScale / 2
+    );
+    eastHalfSegment.rotation.y = Math.PI / 2;
+    eastHalfSegment.position.set(
+      mapBoundary,
+      adjustedFenceHeight / 2,
+      mapBoundary
+    );
+    scene.add(eastHalfSegment);
 
     // West side
     for (let i = 0; i < segmentCount; i++) {
       const z = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
-      segment.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+      segment.scale.set(
+        adjustedFenceLength,
+        adjustedFenceHeight,
+        fenceModelScale
+      );
       segment.rotation.y = Math.PI / 2;
       segment.position.set(-mapBoundary, adjustedFenceHeight / 2, z);
       scene.add(segment);
     }
+    // Add half-size fence at the end of West side
+    const westHalfSegment = fenceModel.clone();
+    westHalfSegment.scale.set(
+      adjustedFenceLength,
+      adjustedFenceHeight,
+      fenceModelScale / 2
+    );
+    westHalfSegment.rotation.y = Math.PI / 2;
+    westHalfSegment.position.set(
+      -mapBoundary,
+      adjustedFenceHeight / 2,
+      mapBoundary
+    );
+    scene.add(westHalfSegment);
   },
   undefined,
   (error) => {
@@ -127,19 +197,27 @@ fenceLoader.load(
   }
 );
 
-
 // Fungsi untuk menangani collision fence dengan cara membatasi posisi pemain
 function handleFenceCollision() {
   const playerPos = controls.getObject().position;
   const margin = 1; // margin kecil agar pemain tidak terlalu dekat dengan fence
-  playerPos.x = Math.max(
-    Math.min(playerPos.x, mapBoundary - margin),
-    -mapBoundary + margin
-  );
-  playerPos.z = Math.max(
-    Math.min(playerPos.z, mapBoundary - margin),
-    -mapBoundary + margin
-  );
+
+  // Only restrict movement if the player is within the map boundaries
+  if (
+    playerPos.x >= -mapBoundary - margin &&
+    playerPos.x <= mapBoundary + margin &&
+    playerPos.z >= -mapBoundary - margin &&
+    playerPos.z <= mapBoundary + margin
+  ) {
+    playerPos.x = Math.max(
+      Math.min(playerPos.x, mapBoundary - margin),
+      -mapBoundary + margin
+    );
+    playerPos.z = Math.max(
+      Math.min(playerPos.z, mapBoundary - margin),
+      -mapBoundary + margin
+    );
+  }
 }
 
 // Add bounding box for stairs
@@ -252,3 +330,19 @@ window.addEventListener("resize", () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// Sofa
+const sofaLoader = new GLTFLoader();
+sofaLoader.load(
+  "./public/sofa_web.glb",
+  (gltf) => {
+    const sofaModel = gltf.scene;
+    sofaModel.position.set(0, 0, 5); // Place the sofa at the user's spawn position
+    sofaModel.scale.set(0.003, 0.003, 0.003); // Reduce the scale of the sofa
+    scene.add(sofaModel);
+  },
+  undefined,
+  (error) => {
+    console.error("Error loading sofa asset:", error);
+  }
+);
