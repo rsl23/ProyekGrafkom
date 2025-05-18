@@ -202,6 +202,95 @@ fenceLoader.load(
   }
 );
 
+// Tambahkan array global untuk menyimpan bounding box grave
+const graveCollisionBoxes = [];
+
+const graveyardLoader = new GLTFLoader();
+graveyardLoader.load(
+  "./public/grave.glb",
+  (gltf) => {
+    const graveModel = gltf.scene;
+    // Ubah rentang graveyard agar lebih sempit (pastikan didalam mapBoundary yang = 30)
+    const startX = -25,
+      endX = -14;
+    const startZ = -22,
+      endZ = -12;
+    // Tingkatkan jumlah baris dan kolom agar jaraknya jadi lebih rapat
+    const rows = 4;
+    const cols = 5;
+    const xStep = (endX - startX) / (cols - 1);
+    const zStep = (endZ - startZ) / (rows - 1);
+
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        const graveInstance = graveModel.clone();
+        graveInstance.position.set(startX + j * xStep, 0, startZ + i * zStep);
+        // Variasi rotasi untuk kesan natural
+        graveInstance.rotation.y = Math.random() * Math.PI * 2;
+        // Sesuaikan scale jika diperlukan
+        graveInstance.scale.set(0.5, 0.5, 0.5);
+        // Pastikan grave berada di dalam mapBoundary
+        if (
+          graveInstance.position.x >= -mapBoundary &&
+          graveInstance.position.x <= mapBoundary &&
+          graveInstance.position.z >= -mapBoundary &&
+          graveInstance.position.z <= mapBoundary
+        ) {
+          scene.add(graveInstance);
+          // Buat bounding box dan expand sumbu Y agar mencakup posisi pemain (misal sampai y=2)
+          const box = new THREE.Box3().setFromObject(graveInstance);
+          box.expandByVector(new THREE.Vector3(0, 2, 0));
+          graveCollisionBoxes.push(box);
+        }
+      }
+    }
+    console.log("Graveyard loaded successfully");
+  },
+  undefined,
+  (error) => {
+    console.error("Terjadi error saat memuat graveyard:", error);
+  }
+);
+
+// Fungsi untuk menangani collision graveyard
+function handleGraveCollision(previousPos) {
+  const playerPos = controls.getObject().position;
+  const newPos = playerPos.clone();
+
+  graveCollisionBoxes.forEach((box) => {
+    // Cek collision 2D (sumbu X dan Z)
+    if (
+      newPos.x >= box.min.x &&
+      newPos.x <= box.max.x &&
+      newPos.z >= box.min.z &&
+      newPos.z <= box.max.z
+    ) {
+      // Hitung pusat dan setengah ukuran (extent) pada sumbu X dan Z
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      const halfSizeX = (box.max.x - box.min.x) / 2;
+      const halfSizeZ = (box.max.z - box.min.z) / 2;
+
+      // Selisih dari pusat box
+      const dx = newPos.x - center.x;
+      const dz = newPos.z - center.z;
+
+      const overlapX = halfSizeX - Math.abs(dx);
+      const overlapZ = halfSizeZ - Math.abs(dz);
+
+      // Resolusi: kembalikan sumbu dengan penetrasi lebih sedikit agar pemain bisa "slide"
+      if (overlapX < overlapZ) {
+        // Kembalikan pergerakan pada sumbu X, biarkan Z tetap untuk slide
+        newPos.x = previousPos.x;
+      } else {
+        // Kembalikan pergerakan pada sumbu Z
+        newPos.z = previousPos.z;
+      }
+    }
+  });
+  controls.getObject().position.copy(newPos);
+}
+
 // Fungsi untuk menangani collision fence dengan cara membatasi posisi pemain
 function handleFenceCollision() {
   const playerPos = controls.getObject().position;
@@ -401,6 +490,7 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   const speed = 5 * delta;
+
   if (controls.isLocked) {
     const previousPos = controls.getObject().position.clone();
 
@@ -412,8 +502,7 @@ function animate() {
     handleJump(delta);
     handleStairsCollision();
     handleFenceCollision();
-    handleSofaCollision(); // Add sofa collision handling
-    updateFlashlight();
+    handleGraveCollision(previousPos);
   }
 
   // Update flashlight position and target every frame
@@ -432,8 +521,6 @@ window.addEventListener("resize", () => {
 
 // Sofa
 const sofaLoader = new GLTFLoader();
-let sofaBoundingBox; // Variable to store sofa bounding box
-
 sofaLoader.load(
   "./public/sofa_web.glb",
   (gltf) => {
@@ -441,23 +528,6 @@ sofaLoader.load(
     sofaModel.position.set(0, 0, 5); // Place the sofa at the user's spawn position
     sofaModel.scale.set(0.003, 0.003, 0.003); // Reduce the scale of the sofa
     scene.add(sofaModel);
-    // Create bounding box for sofa
-    sofaBoundingBox = new THREE.Box3().setFromObject(sofaModel);
-
-    // Add visual helper for the bounding box (for debugging)
-    // const boxHelper = new THREE.Box3Helper(sofaBoundingBox, 0xff0000);
-    // scene.add(boxHelper);
-
-    // Add a small buffer around the sofa (making collision area slightly larger)
-    sofaBoundingBox.min.x -= 0.5;
-    sofaBoundingBox.min.z -= 0.5;
-    sofaBoundingBox.max.x += 0.5;
-    sofaBoundingBox.max.z += 0.5;
-
-    console.log(
-      "Sofa model loaded successfully with collision bounds:",
-      sofaBoundingBox
-    );
   },
   undefined,
   (error) => {
@@ -465,57 +535,43 @@ sofaLoader.load(
   }
 );
 
-// Function to handle sofa collision
-function handleSofaCollision() {
-  if (sofaBoundingBox) {
-    const playerPosition = controls.getObject().position;
-    const prevPosition = {
-      x: playerPosition.x,
-      z: playerPosition.z,
-    };
+const tvLoader = new GLTFLoader();
+tvLoader.load(
+  "./public/tv.glb",
+  (gltf) => {
+    const tvModel = gltf.scene;
+    // Letakkan tv di depan sofa dengan jarak yang cukup
+    tvModel.position.set(5, 3, 7);
+    // Sesuaikan scale sesuai ukuran model
+    tvModel.scale.set(2, 2, 2);
+    // Agar tv menghadap ke arah sofa di posisi (0, 0, 5),
+    // gunakan metode lookAt dengan target posisi sofa
+    tvModel.lookAt(new THREE.Vector3(3, 2, 1));
+    scene.add(tvModel);
 
-    // Check if player is within sofa bounding box (x and z axes only)
-    if (
-      playerPosition.x >= sofaBoundingBox.min.x &&
-      playerPosition.x <= sofaBoundingBox.max.x &&
-      playerPosition.z >= sofaBoundingBox.min.z &&
-      playerPosition.z <= sofaBoundingBox.max.z
-    ) {
-      // Calculate direction vector from sofa center to player
-      const sofaCenter = new THREE.Vector3();
-      sofaBoundingBox.getCenter(sofaCenter);
+    // Membuat video element dan texture
+    const video = document.createElement("video");
+    video.src = "./public/videoTes.mp4"; // Ganti dengan path video yang sesuai
+    video.crossOrigin = "anonymous";
+    video.loop = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.play();
 
-      const directionX = playerPosition.x - sofaCenter.x;
-      const directionZ = playerPosition.z - sofaCenter.z;
+    const videoTexture = new THREE.VideoTexture(video);
+    videoTexture.minFilter = THREE.LinearFilter;
+    videoTexture.magFilter = THREE.LinearFilter;
+    videoTexture.format = THREE.RGBFormat;
 
-      // Normalize direction
-      const length = Math.sqrt(
-        directionX * directionX + directionZ * directionZ
-      );
-      const normalizedDirX = directionX / length;
-      const normalizedDirZ = directionZ / length;
-
-      // Push player outside the bounding box
-      const pushDistance = 0.5; // Distance to push player away
-      playerPosition.x =
-        sofaCenter.x +
-        (normalizedDirX * (sofaBoundingBox.max.x - sofaBoundingBox.min.x)) / 2 +
-        normalizedDirX * pushDistance;
-      playerPosition.z =
-        sofaCenter.z +
-        (normalizedDirZ * (sofaBoundingBox.max.z - sofaBoundingBox.min.z)) / 2 +
-        normalizedDirZ * pushDistance;
-
-      // If player is stuck, just restore previous position
-      if (
-        playerPosition.x >= sofaBoundingBox.min.x &&
-        playerPosition.x <= sofaBoundingBox.max.x &&
-        playerPosition.z >= sofaBoundingBox.min.z &&
-        playerPosition.z <= sofaBoundingBox.max.z
-      ) {
-        playerPosition.x = prevPosition.x;
-        playerPosition.z = prevPosition.z;
+    // Asumsikan mesh layar memiliki nama "Screen". Jika tidak, Anda harus menyesuaikan
+    tvModel.traverse((child) => {
+      if (child.isMesh && child.name.toLowerCase().includes("screen")) {
+        child.material = new THREE.MeshBasicMaterial({ map: videoTexture });
       }
-    }
+    });
+  },
+  undefined,
+  (error) => {
+    console.error("Error loading tv asset:", error);
   }
-}
+);
