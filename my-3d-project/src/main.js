@@ -63,6 +63,61 @@ for (let i = -gridSize / 2; i < gridSize / 2; i++) {
 // Remove the original large floor
 scene.remove(floor);
 
+// Ubah batas map menjadi lebih kecil
+const mapBoundary = 30; // Map dari -30 sampai 30 pada sumbu x dan z
+const fenceHeight = 5;
+const fenceLength = mapBoundary * 2; // panjang fence = 60
+
+// Faktor skala untuk mengecilkan model fence_1.glb
+const fenceModelScale = 0.5;
+const adjustedFenceHeight = fenceHeight * fenceModelScale;
+const adjustedFenceLength = fenceLength * fenceModelScale;
+
+const fenceLoader = new GLTFLoader();
+fenceLoader.load(
+  "./public/fence_1.glb",
+  (gltf) => {
+    const fenceModel = gltf.scene;
+    // North fence (bagian utara)
+    const northFence = fenceModel.clone();
+    northFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+    northFence.position.set(0, adjustedFenceHeight / 2, -mapBoundary);
+    scene.add(northFence);
+
+    // South fence (bagian selatan)
+    const southFence = fenceModel.clone();
+    southFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+    southFence.position.set(0, adjustedFenceHeight / 2, mapBoundary);
+    scene.add(southFence);
+
+    // East fence (bagian timur)
+    const eastFence = fenceModel.clone();
+    eastFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+    eastFence.rotation.y = Math.PI / 2;
+    eastFence.position.set(mapBoundary, adjustedFenceHeight / 2, 0);
+    scene.add(eastFence);
+
+    // West fence (bagian barat)
+    const westFence = fenceModel.clone();
+    westFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+    westFence.rotation.y = Math.PI / 2;
+    westFence.position.set(-mapBoundary, adjustedFenceHeight / 2, 0);
+    scene.add(westFence);
+  },
+  undefined,
+  (error) => {
+    console.error("Terjadi error saat memuat fence:", error);
+  }
+);
+
+// Fungsi untuk menangani collision fence dengan cara membatasi posisi pemain
+function handleFenceCollision() {
+  const playerPos = controls.getObject().position;
+  const margin = 1; // margin kecil agar pemain tidak terlalu dekat dengan fence
+  playerPos.x = Math.max(Math.min(playerPos.x, mapBoundary - margin), -mapBoundary + margin);
+  playerPos.z = Math.max(Math.min(playerPos.z, mapBoundary - margin), -mapBoundary + margin);
+}
+
 // Add bounding box for stairs
 let stairsBoundingBox;
 
@@ -146,7 +201,7 @@ function handleStairsCollision() {
   }
 }
 
-// Update animate function to include jump handling and stairs collision handling
+// Update animate function to include jump handling, stairs collision handling, and fence collision handling
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
@@ -160,6 +215,7 @@ function animate() {
 
     handleJump(delta);
     handleStairsCollision();
+    handleFenceCollision();
   }
 
   renderer.render(scene, camera);
