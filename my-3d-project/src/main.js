@@ -575,3 +575,32 @@ tvLoader.load(
     console.error("Error loading tv asset:", error);
   }
 );
+
+// Tambahkan bangunan hancur
+const bangunanHancurLoader = new GLTFLoader();
+bangunanHancurLoader.load(
+  "./public/bangunan_hancur.glb",
+  (gltf) => {
+    const bangunanHancurModel = gltf.scene;
+    // Posisikan bangunan hancur di sisi berlawanan dari makam
+    bangunanHancurModel.position.set(10, 0, -10);
+    // Sesuaikan ukuran bangunan hancur
+    bangunanHancurModel.scale.set(1, 1, 1);
+    // Rotasi agar tampak lebih alami
+    bangunanHancurModel.rotation.y = Math.PI / 2; // Rotasi 45 derajat
+    scene.add(bangunanHancurModel);
+
+    // Buat bounding box untuk collision detection
+    const bangunanHancurBox = new THREE.Box3().setFromObject(
+      bangunanHancurModel
+    );
+    bangunanHancurBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Tambahkan buffer
+    graveCollisionBoxes.push(bangunanHancurBox); // Gunakan sistem collision yang sama dengan makam
+
+    console.log("Bangunan hancur loaded successfully");
+  },
+  undefined,
+  (error) => {
+    console.error("Error loading bangunan hancur asset:", error);
+  }
+);
