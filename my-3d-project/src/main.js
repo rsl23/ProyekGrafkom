@@ -117,7 +117,7 @@ fenceLoader.load(
       const segment = fenceModel.clone();
       segment.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
       segment.rotation.y = Math.PI / 2;
-      segment.position.set(-mapBoundary, adjustedFenceHeight / 2, z);
+      segment.position.set(-mapBoundary2, adjustedFenceHeight / 2, z);
       scene.add(segment);
     }
   },
@@ -127,6 +127,47 @@ fenceLoader.load(
   }
 );
 
+// Membuat graveyard dengan beberapa instance grave.glb (grave tidak keluar map dan jaraknya lebih sempit)
+const graveyardLoader = new GLTFLoader();
+graveyardLoader.load(
+  "./public/grave.glb",
+  (gltf) => {
+    const graveModel = gltf.scene;
+    // Ubah rentang graveyard agar lebih sempit (pastikan didalam mapBoundary yang = 30)
+    const startX = -25, endX = -5;
+    const startZ = -22, endZ = -12;
+    // Tingkatkan jumlah baris dan kolom agar jaraknya jadi lebih rapat
+    const rows = 4;
+    const cols = 5;
+    const xStep = (endX - startX) / (cols - 1) -2;
+    const zStep = (endZ - startZ) / (rows - 1);
+
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        const graveInstance = graveModel.clone();
+        graveInstance.position.set(startX + j * xStep, 0, startZ + i * zStep);
+        // Tambahkan variasi rotasi untuk kesan natural
+        graveInstance.rotation.y = Math.random() * Math.PI * 2;
+        // Sesuaikan scale jika diperlukan
+        graveInstance.scale.set(0.5, 0.5, 0.5);
+        // Pastikan grave berada di dalam mapBoundary
+        if (
+          graveInstance.position.x >= -mapBoundary &&
+          graveInstance.position.x <= mapBoundary &&
+          graveInstance.position.z >= -mapBoundary &&
+          graveInstance.position.z <= mapBoundary
+        ) {
+          scene.add(graveInstance);
+        }
+      }
+    }
+    console.log("Graveyard loaded successfully");
+  },
+  undefined,
+  (error) => {
+    console.error("Terjadi error saat memuat graveyard:", error);
+  }
+);
 
 // Fungsi untuk menangani collision fence dengan cara membatasi posisi pemain
 function handleFenceCollision() {
@@ -146,13 +187,35 @@ function handleFenceCollision() {
 let stairsBoundingBox;
 
 // // Load 3D house model with error handling
-// const loader = new GLTFLoader();
-// loader.load(
-//   "./public/House.glb",
+const loader = new GLTFLoader();
+loader.load(
+  "./public/grave.glb",
+  (gltf) => {
+    const houseModel = gltf.scene;
+    houseModel.position.set(-20, 0, -26); // Position the house
+    houseModel.scale.set(0.5, 0.5, 0.5); // Double the size of the house
+    scene.add(houseModel);
+
+    // Assuming stairs are part of the house model, calculate bounding box
+    stairsBoundingBox = new THREE.Box3().setFromObject(
+      houseModel.getObjectByName("Stairs")
+    );
+
+    console.log("House model loaded successfully");
+  },
+  undefined,
+  (error) => {
+    console.error("An error occurred while loading the house model:", error);
+  }
+);
+
+// const loa = new GLTFLoader();
+// loa.load(
+//   "./public/spooky_fetch.glb",
 //   (gltf) => {
 //     const houseModel = gltf.scene;
-//     houseModel.position.set(0, 2, -10); // Position the house
-//     houseModel.scale.set(20, 20, 20); // Double the size of the house
+//     houseModel.position.set(-10, 0, -26); // Position the house
+//     houseModel.scale.set(0.5, 0.5, 0.5); // Double the size of the house
 //     scene.add(houseModel);
 
 //     // Assuming stairs are part of the house model, calculate bounding box
