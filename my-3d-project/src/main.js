@@ -77,45 +77,29 @@ const fenceLoader = new GLTFLoader();
 fenceLoader.load(
   "./public/fence_1.glb",
   (gltf) => {
-    const fenceModel = gltf.swcene;
+    const fenceModel = gltf.scene;
     // North fence (bagian utara)
     const northFence = fenceModel.clone();
-    northFence.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale
-    );
+    northFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
     northFence.position.set(0, adjustedFenceHeight / 2, -mapBoundary);
     scene.add(northFence);
 
     // South fence (bagian selatan)
     const southFence = fenceModel.clone();
-    southFence.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale
-    );
+    southFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
     southFence.position.set(0, adjustedFenceHeight / 2, mapBoundary);
     scene.add(southFence);
 
     // East fence (bagian timur)
     const eastFence = fenceModel.clone();
-    eastFence.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale
-    );
+    eastFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
     eastFence.rotation.y = Math.PI / 2;
     eastFence.position.set(mapBoundary, adjustedFenceHeight / 2, 0);
     scene.add(eastFence);
 
     // West fence (bagian barat)
     const westFence = fenceModel.clone();
-    westFence.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale
-    );
+    westFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
     westFence.rotation.y = Math.PI / 2;
     westFence.position.set(-mapBoundary, adjustedFenceHeight / 2, 0);
     scene.add(westFence);
@@ -130,41 +114,35 @@ fenceLoader.load(
 function handleFenceCollision() {
   const playerPos = controls.getObject().position;
   const margin = 1; // margin kecil agar pemain tidak terlalu dekat dengan fence
-  playerPos.x = Math.max(
-    Math.min(playerPos.x, mapBoundary - margin),
-    -mapBoundary + margin
-  );
-  playerPos.z = Math.max(
-    Math.min(playerPos.z, mapBoundary - margin),
-    -mapBoundary + margin
-  );
+  playerPos.x = Math.max(Math.min(playerPos.x, mapBoundary - margin), -mapBoundary + margin);
+  playerPos.z = Math.max(Math.min(playerPos.z, mapBoundary - margin), -mapBoundary + margin);
 }
 
 // Add bounding box for stairs
-// let stairsBoundingBox;
+let stairsBoundingBox;
 
 // Load 3D house model with error handling
-// const loader = new GLTFLoader();
-// loader.load(
-//   "./public/House.glb",
-//   (gltf) => {
-//     const houseModel = gltf.scene;
-//     houseModel.position.set(0, 2, -10); // Position the house
-//     houseModel.scale.set(20, 20, 20); // Double the size of the house
-//     scene.add(houseModel);
+const loader = new GLTFLoader();
+loader.load(
+  "./public/House.glb",
+  (gltf) => {
+    const houseModel = gltf.scene;
+    houseModel.position.set(0, 2, -10); // Position the house
+    houseModel.scale.set(20, 20, 20); // Double the size of the house
+    scene.add(houseModel);
 
-//     // Assuming stairs are part of the house model, calculate bounding box
-//     stairsBoundingBox = new THREE.Box3().setFromObject(
-//       houseModel.getObjectByName("Stairs")
-//     );
+    // Assuming stairs are part of the house model, calculate bounding box
+    stairsBoundingBox = new THREE.Box3().setFromObject(
+      houseModel.getObjectByName("Stairs")
+    );
 
-//     console.log("House model loaded successfully");
-//   },
-//   undefined,
-//   (error) => {
-//     console.error("An error occurred while loading the house model:", error);
-//   }
-// );
+    console.log("House model loaded successfully");
+  },
+  undefined,
+  (error) => {
+    console.error("An error occurred while loading the house model:", error);
+  }
+);
 
 // Pointer Lock Controls
 const controls = new PointerLockControls(camera, document.body);
@@ -208,20 +186,20 @@ document.addEventListener("keydown", (e) => {
 
 const clock = new THREE.Clock();
 
-// function handleStairsCollision() {
-//   if (stairsBoundingBox) {
-//     const playerPosition = controls.getObject().position;
-//     if (
-//       playerPosition.x >= stairsBoundingBox.min.x &&
-//       playerPosition.x <= stairsBoundingBox.max.x &&
-//       playerPosition.z >= stairsBoundingBox.min.z &&
-//       playerPosition.z <= stairsBoundingBox.max.z
-//     ) {
-//       // Adjust player's height to simulate climbing stairs
-//       playerPosition.y = Math.max(playerPosition.y, stairsBoundingBox.max.y);
-//     }
-//   }
-// }
+function handleStairsCollision() {
+  if (stairsBoundingBox) {
+    const playerPosition = controls.getObject().position;
+    if (
+      playerPosition.x >= stairsBoundingBox.min.x &&
+      playerPosition.x <= stairsBoundingBox.max.x &&
+      playerPosition.z >= stairsBoundingBox.min.z &&
+      playerPosition.z <= stairsBoundingBox.max.z
+    ) {
+      // Adjust player's height to simulate climbing stairs
+      playerPosition.y = Math.max(playerPosition.y, stairsBoundingBox.max.y);
+    }
+  }
+}
 
 // Update animate function to include jump handling, stairs collision handling, and fence collision handling
 function animate() {
