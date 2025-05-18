@@ -33,7 +33,7 @@ dirLight.castShadow = true;
 scene.add(dirLight);
 
 // Floor (luar rumah)
-const floorGeo = new THREE.PlaneGeometry(100, 100);
+const floorGeo = new THREE.PlaneGeometry(1000, 1000);
 
 // Load grass texture
 const grassTexture = new THREE.TextureLoader().load("./public/grass.jpg");
@@ -65,11 +65,11 @@ scene.remove(floor);
 
 // Ubah batas map menjadi lebih kecil
 const mapBoundary = 30; // Map dari -30 sampai 30 pada sumbu x dan z
-const fenceHeight = 5;
-const fenceLength = mapBoundary * 2; // panjang fence = 60
+const fenceHeight = 1;
+const fenceLength = 0.4; // panjang fence = 60
 
 // Faktor skala untuk mengecilkan model fence_1.glb
-const fenceModelScale = 0.5;
+const fenceModelScale = 0.2;
 const adjustedFenceHeight = fenceHeight * fenceModelScale;
 const adjustedFenceLength = fenceLength * fenceModelScale;
 
@@ -80,26 +80,42 @@ fenceLoader.load(
     const fenceModel = gltf.scene;
     // North fence (bagian utara)
     const northFence = fenceModel.clone();
-    northFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+    northFence.scale.set(
+      adjustedFenceLength,
+      adjustedFenceHeight,
+      fenceModelScale
+    );
     northFence.position.set(0, adjustedFenceHeight / 2, -mapBoundary);
     scene.add(northFence);
 
     // South fence (bagian selatan)
     const southFence = fenceModel.clone();
-    southFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+    southFence.scale.set(
+      adjustedFenceLength,
+      adjustedFenceHeight,
+      fenceModelScale
+    );
     southFence.position.set(0, adjustedFenceHeight / 2, mapBoundary);
     scene.add(southFence);
 
     // East fence (bagian timur)
     const eastFence = fenceModel.clone();
-    eastFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+    eastFence.scale.set(
+      adjustedFenceLength,
+      adjustedFenceHeight,
+      fenceModelScale
+    );
     eastFence.rotation.y = Math.PI / 2;
     eastFence.position.set(mapBoundary, adjustedFenceHeight / 2, 0);
     scene.add(eastFence);
 
     // West fence (bagian barat)
     const westFence = fenceModel.clone();
-    westFence.scale.set(adjustedFenceLength, adjustedFenceHeight, fenceModelScale);
+    westFence.scale.set(
+      adjustedFenceLength,
+      adjustedFenceHeight,
+      fenceModelScale
+    );
     westFence.rotation.y = Math.PI / 2;
     westFence.position.set(-mapBoundary, adjustedFenceHeight / 2, 0);
     scene.add(westFence);
@@ -114,35 +130,41 @@ fenceLoader.load(
 function handleFenceCollision() {
   const playerPos = controls.getObject().position;
   const margin = 1; // margin kecil agar pemain tidak terlalu dekat dengan fence
-  playerPos.x = Math.max(Math.min(playerPos.x, mapBoundary - margin), -mapBoundary + margin);
-  playerPos.z = Math.max(Math.min(playerPos.z, mapBoundary - margin), -mapBoundary + margin);
+  playerPos.x = Math.max(
+    Math.min(playerPos.x, mapBoundary - margin),
+    -mapBoundary + margin
+  );
+  playerPos.z = Math.max(
+    Math.min(playerPos.z, mapBoundary - margin),
+    -mapBoundary + margin
+  );
 }
 
 // Add bounding box for stairs
 let stairsBoundingBox;
 
-// Load 3D house model with error handling
-const loader = new GLTFLoader();
-loader.load(
-  "./public/House.glb",
-  (gltf) => {
-    const houseModel = gltf.scene;
-    houseModel.position.set(0, 2, -10); // Position the house
-    houseModel.scale.set(20, 20, 20); // Double the size of the house
-    scene.add(houseModel);
+// // Load 3D house model with error handling
+// const loader = new GLTFLoader();
+// loader.load(
+//   "./public/House.glb",
+//   (gltf) => {
+//     const houseModel = gltf.scene;
+//     houseModel.position.set(0, 2, -10); // Position the house
+//     houseModel.scale.set(20, 20, 20); // Double the size of the house
+//     scene.add(houseModel);
 
-    // Assuming stairs are part of the house model, calculate bounding box
-    stairsBoundingBox = new THREE.Box3().setFromObject(
-      houseModel.getObjectByName("Stairs")
-    );
+//     // Assuming stairs are part of the house model, calculate bounding box
+//     stairsBoundingBox = new THREE.Box3().setFromObject(
+//       houseModel.getObjectByName("Stairs")
+//     );
 
-    console.log("House model loaded successfully");
-  },
-  undefined,
-  (error) => {
-    console.error("An error occurred while loading the house model:", error);
-  }
-);
+//     console.log("House model loaded successfully");
+//   },
+//   undefined,
+//   (error) => {
+//     console.error("An error occurred while loading the house model:", error);
+//   }
+// );
 
 // Pointer Lock Controls
 const controls = new PointerLockControls(camera, document.body);
