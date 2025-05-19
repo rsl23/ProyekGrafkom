@@ -483,6 +483,274 @@ function updateFlashlight() {
   }
 }
 
+// Tambahkan array untuk menyimpan posisi generator
+const generatorObjects = [];
+
+// Load audio untuk generator
+const audioListener = new THREE.AudioListener();
+camera.add(audioListener);
+
+// Dictionary untuk menyimpan status generator (aktif/nonaktif)
+const generatorStatus = {};
+
+// Memuat suara generator
+const generatorSound = new THREE.Audio(audioListener);
+const audioLoader = new THREE.AudioLoader();
+audioLoader.load("./public/suara_generator.mp3", function (buffer) {
+  generatorSound.setBuffer(buffer);
+  generatorSound.setLoop(true);
+  generatorSound.setVolume(0);
+  generatorSound.play(); // Putar dari awal tapi dengan volume 0
+});
+
+// Fungsi untuk mengecek jarak ke generator terdekat
+function checkGeneratorProximity() {
+  if (!controls.isLocked) return;
+
+  const playerPos = controls.getObject().position;
+  const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
+
+  let minDistance = Infinity;
+  let closestGenerator = null;
+  let isLookingAtGenerator = false;
+
+  // Threshold for dot product to determine if player is looking at generator
+  // Higher value = narrower field of view (more accurate aiming required)
+  const lookingThreshold = 0.85; // Increased from 0.7 for more precise cursor aiming
+
+  generatorObjects.forEach((generator, index) => {
+    const distance = playerPos.distanceTo(generator.position);
+
+    // Check if generator is within interaction radius
+    if (distance <= 5) {
+      // Calculate normalized vector from player to generator
+      const directionToGenerator = new THREE.Vector3()
+        .subVectors(generator.position, playerPos)
+        .normalize();
+
+      // Calculate cosine of angle between camera direction and direction to generator
+      const dotProduct = cameraDirection.dot(directionToGenerator);
+
+      // Player is looking at generator if dot product exceeds threshold
+      if (dotProduct > lookingThreshold) {
+        isLookingAtGenerator = true;
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestGenerator = { position: generator.position, index: index };
+        }
+      }
+    }
+  });
+
+  // Only show prompt when player is correctly looking at a generator (using cursor)
+  if (minDistance <= 5 && closestGenerator && isLookingAtGenerator) {
+    const promptElement = document.getElementById("interactionPrompt");
+    promptElement.style.display = "block";
+
+    // Show different prompt based on generator status
+    if (generatorStatus[closestGenerator.index]) {
+      promptElement.innerHTML =
+        '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
+    } else {
+      promptElement.innerHTML =
+        '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
+    }
+
+    // Adjust volume based on distance if generator is active
+    if (generatorStatus[closestGenerator.index]) {
+      const volume = 1 - minDistance / 5; // Volume between 0-1 based on distance
+      generatorSound.setVolume(volume);
+    }
+
+    return closestGenerator;
+  } else {
+    // Hide prompt when not looking at any generator
+    document.getElementById("interactionPrompt").style.display = "none";
+
+    // Check for active generators in radius for sound adjustment
+    let activeVolumeSet = false;
+    generatorObjects.forEach((generator, index) => {
+      if (generatorStatus[index]) {
+        const distance = playerPos.distanceTo(generator.position);
+        if (distance <= 5) {
+          const volume = 1 - distance / 5;
+          generatorSound.setVolume(volume);
+          activeVolumeSet = true;
+        }
+      }
+    });
+
+    if (!activeVolumeSet) {
+      generatorSound.setVolume(0); // No audible generators
+    }
+
+    return null;
+  }
+}
+
+// Event listener untuk tombol E (interaksi)
+document.addEventListener("keydown", (e) => {
+  if (e.code === "KeyE") {
+    const closestGenerator = checkGeneratorProximity();
+    if (closestGenerator) {
+      const index = closestGenerator.index;
+      const promptElement = document.getElementById("interactionPrompt");
+
+      // Toggle status generator
+      generatorStatus[index] = !generatorStatus[index];
+
+      // Visual feedback animation for the prompt
+      promptElement.style.transform = "translateX(-50%) scale(1.1)";
+      setTimeout(() => {
+        promptElement.style.transform = "translateX(-50%) scale(0.95)";
+      }, 100);
+
+      if (generatorStatus[index]) {
+        console.log(`Generator ${index + 1} diaktifkan!`);
+
+        // Tambahkan visual feedback saat generator aktif
+        promptElement.style.border = "2px solid #00ff00";
+        promptElement.style.boxShadow = "0 0 15px rgba(0, 255, 0, 0.6)";
+        promptElement.innerHTML =
+          '<span style="color: #00ff00;">[E]</span> Generator Aktif';
+
+        // Audio sudah diplay di awal, hanya perlu mengatur volume
+        const distance = controls
+          .getObject()
+          .position.distanceTo(closestGenerator.position);
+        const volume = 1 - distance / 5;
+        generatorSound.setVolume(volume);
+
+        // Reset visual style after feedback
+        setTimeout(() => {
+          if (generatorStatus[index]) {
+            promptElement.style.border = "2px solid #ff6600";
+            promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
+            promptElement.innerHTML =
+              '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
+          }
+        }, 1000);
+      } else {
+        console.log(`Generator ${index + 1} dinonaktifkan!`);
+
+        // Visual feedback for deactivation
+        promptElement.style.border = "2px solid #ff0000";
+        promptElement.style.boxShadow = "0 0 15px rgba(255, 0, 0, 0.6)";
+        promptElement.innerHTML =
+          '<span style="color: #ff0000;">[E]</span> Generator Nonaktif';
+
+        // Gradually reduce volume
+        const fadeInterval = setInterval(() => {
+          const currentVolume = generatorSound.getVolume();
+          if (currentVolume > 0.05) {
+            generatorSound.setVolume(currentVolume - 0.05);
+          } else {
+            generatorSound.setVolume(0);
+            clearInterval(fadeInterval);
+          }
+        }, 50);
+
+        // Reset UI after feedback
+        setTimeout(() => {
+          if (!generatorStatus[index]) {
+            promptElement.style.border = "2px solid #ff6600";
+            promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
+            promptElement.innerHTML =
+              '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
+          }
+        }, 1000);
+      }
+    }
+  }
+});
+
+// Tambahkan elemen UI untuk interaksi
+const interactionPrompt = document.createElement("div");
+interactionPrompt.id = "interactionPrompt";
+interactionPrompt.style.position = "absolute";
+interactionPrompt.style.bottom = "20%";
+interactionPrompt.style.left = "50%";
+interactionPrompt.style.transform = "translateX(-50%) scale(0.95)";
+interactionPrompt.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+interactionPrompt.style.color = "white";
+interactionPrompt.style.padding = "12px 20px";
+interactionPrompt.style.borderRadius = "8px";
+interactionPrompt.style.display = "none";
+interactionPrompt.style.fontFamily = "Arial, sans-serif";
+interactionPrompt.style.fontSize = "20px";
+interactionPrompt.style.fontWeight = "bold";
+interactionPrompt.style.zIndex = "1000";
+interactionPrompt.style.textShadow = "2px 2px 4px rgba(0, 0, 0, 0.8)";
+interactionPrompt.style.border = "2px solid #ff6600";
+interactionPrompt.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
+interactionPrompt.style.transition = "all 0.2s ease-in-out";
+interactionPrompt.style.opacity = "0.95";
+document.body.appendChild(interactionPrompt);
+
+// Add a cursor dot in the center of the screen for better aiming
+const cursorDot = document.createElement("div");
+cursorDot.id = "cursorDot";
+cursorDot.style.position = "absolute";
+cursorDot.style.top = "50%";
+cursorDot.style.left = "50%";
+cursorDot.style.width = "6px";
+cursorDot.style.height = "6px";
+cursorDot.style.borderRadius = "50%";
+cursorDot.style.backgroundColor = "white";
+cursorDot.style.transform = "translate(-50%, -50%)";
+cursorDot.style.zIndex = "1000";
+cursorDot.style.opacity = "0.7";
+cursorDot.style.pointerEvents = "none"; // Ensure it doesn't interfere with clicking
+document.body.appendChild(cursorDot);
+
+// Load 5 generators with random positions
+const generatorLoader = new GLTFLoader();
+generatorLoader.load(
+  "./public/generator.glb",
+  (gltf) => {
+    const generatorModel = gltf.scene;
+
+    // Create 5 generators at random positions
+    const generatorPositions = [
+      { x: 5, y: 0.5, z: -10 }, // Position of the first generator
+      { x: 22, y: 0.5, z: -20 }, // Other generators at random positions
+      { x: -14, y: 0.5, z: -25 }, // across the map
+      { x: 15, y: 0.5, z: 25 },
+      { x: -20, y: 0.5, z: 25 },
+    ];
+
+    // Create and add each generator
+    generatorPositions.forEach((pos, index) => {
+      const generatorInstance = generatorModel.clone();
+
+      // Add slight randomization to positions
+      const randomOffset = Math.random() * 3 - 1.5; // Between -1.5 and 1.5
+      pos.x += randomOffset;
+      pos.z += randomOffset; // Position the generator and add to scene
+      generatorInstance.position.set(pos.x, pos.y, pos.z);
+      generatorInstance.scale.set(0.01, 0.01, 0.01);
+      generatorInstance.rotation.y = Math.random() * Math.PI * 2; // Random rotation
+      scene.add(generatorInstance); // Simpan referensi generator untuk interaksi
+      generatorObjects.push(generatorInstance);
+      generatorStatus[index] = false; // Set status awal ke nonaktif
+
+      // Add collision detection for generator
+      const generatorBox = new THREE.Box3().setFromObject(generatorInstance);
+      generatorBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
+      graveCollisionBoxes.push(generatorBox); // Use same collision system as graves
+
+      console.log(
+        `Generator ${index + 1} loaded successfully at position:`,
+        generatorInstance.position
+      );
+    });
+  },
+  undefined,
+  (error) => {
+    console.error("Error loading generator assets:", error);
+  }
+);
+
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
   requestAnimationFrame(animate);
@@ -501,6 +769,25 @@ function animate() {
     handleStairsCollision();
     handleFenceCollision();
     handleGraveCollision(previousPos);
+
+    // Check generator proximity for interaction and update cursor
+    const closestGenerator = checkGeneratorProximity();
+
+    // Update cursor dot color based on whether player is looking at a generator
+    const cursorDot = document.getElementById("cursorDot");
+    if (closestGenerator) {
+      // Change cursor color when looking at interactive object
+      cursorDot.style.backgroundColor = "#ff6600";
+      cursorDot.style.boxShadow = "0 0 5px rgba(255, 102, 0, 0.8)";
+      cursorDot.style.width = "8px";
+      cursorDot.style.height = "8px";
+    } else {
+      // Reset to default when not looking at anything interactive
+      cursorDot.style.backgroundColor = "white";
+      cursorDot.style.boxShadow = "none";
+      cursorDot.style.width = "6px";
+      cursorDot.style.height = "6px";
+    }
   }
 
   // Update flashlight position and target every frame
@@ -579,53 +866,5 @@ bangunanHancurLoader.load(
   undefined,
   (error) => {
     console.error("Error loading bangunan hancur asset:", error);
-  }
-);
-
-// Load 5 generators with random positions
-const generatorLoader = new GLTFLoader();
-generatorLoader.load(
-  "./public/generator.glb",
-  (gltf) => {
-    const generatorModel = gltf.scene;
-
-    // Create 5 generators at random positions
-    const generatorPositions = [
-      { x: 5, y: 0.5, z: -10 }, // Position of the first generator
-      { x: 22, y: 0.5, z: -20 }, // Other generators at random positions
-      { x: -14, y: 0.5, z: -25 }, // across the map
-      { x: 15, y: 0.5, z: 25 },
-      { x: -20, y: 0.5, z: 25 },
-    ];
-
-    // Create and add each generator
-    generatorPositions.forEach((pos, index) => {
-      const generatorInstance = generatorModel.clone();
-
-      // Add slight randomization to positions
-      const randomOffset = Math.random() * 3 - 1.5; // Between -1.5 and 1.5
-      pos.x += randomOffset;
-      pos.z += randomOffset;
-
-      // Position the generator and add to scene
-      generatorInstance.position.set(pos.x, pos.y, pos.z);
-      generatorInstance.scale.set(0.01, 0.01, 0.01);
-      generatorInstance.rotation.y = Math.random() * Math.PI * 2; // Random rotation
-      scene.add(generatorInstance);
-
-      // Add collision detection for generator
-      const generatorBox = new THREE.Box3().setFromObject(generatorInstance);
-      generatorBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
-      graveCollisionBoxes.push(generatorBox); // Use same collision system as graves
-
-      console.log(
-        `Generator ${index + 1} loaded successfully at position:`,
-        generatorInstance.position
-      );
-    });
-  },
-  undefined,
-  (error) => {
-    console.error("Error loading generator assets:", error);
   }
 );
