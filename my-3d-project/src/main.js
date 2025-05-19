@@ -9,7 +9,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000033); // Dark blue for night
+scene.background = new THREE.Color(0x000000);
 
 // Camera
 const camera = new THREE.PerspectiveCamera(
@@ -68,6 +68,30 @@ for (let i = -gridSize / 2; i < gridSize / 2; i++) {
 
 // Remove the original large floor
 scene.remove(floor);
+
+// Add corpse at spawn position
+const corpseLoader = new GLTFLoader();
+corpseLoader.load(
+  "./public/corpse.glb",
+  (gltf) => {
+    const corpseModel = gltf.scene;
+    corpseModel.position.set(0, 0, 5); // Place corpse at player spawn
+    corpseModel.scale.set(2, 2, 2); // Adjust scale as needed
+    corpseModel.rotation.y = Math.PI / 2; // Rotate for better visibility
+    scene.add(corpseModel);
+
+    // Add collision for the corpse so player can't walk through it
+    const corpseBox = new THREE.Box3().setFromObject(corpseModel);
+    corpseBox.expandByVector(new THREE.Vector3(0.2, 0.5, 0.2)); // Add small buffer
+    graveCollisionBoxes.push(corpseBox); // Use same collision system as graves
+
+    console.log("Corpse loaded successfully at spawn position");
+  },
+  undefined,
+  (error) => {
+    console.error("Error loading corpse model:", error);
+  }
+);
 
 // Ubah batas map menjadi lebih kecil
 const mapBoundary = 30; // Map dari -30 sampai 30 pada sumbu x dan z
@@ -411,16 +435,54 @@ scene.add(flashlightBulb);
 // Flashlight toggle state
 let flashlightOn = true;
 
+// Flashlight dimming variables
+const dimmingDuration = 20; // Durasi dimming (detik)
+const maxIntensity = 3; // Intensitas maksimum
+const minIntensity = 0; // Intensitas minimum (mati)
+let dimmingStartTime = Date.now(); // Waktu mulai dimming
+let isDimming = true; // Status dimming
+let isRecharging = false; // Status recharging
+const rechargeDuration = 5; // Durasi recharge (detik)
+let rechargeStartTime = 0; // Waktu mulai recharge
+let currentFlashlightIntensity = maxIntensity; // Intensitas awal
+
 // Add F key for toggling flashlight
 document.addEventListener("keydown", (e) => {
   if (e.code === "KeyF") {
     flashlightOn = !flashlightOn;
     if (flashlightOn) {
-      flashlight.intensity = 3;
-      flashlightBulb.intensity = 0.5;
+      // Reset dimming when turning on
+      dimmingStartTime = Date.now();
+      isDimming = true;
+      isRecharging = false;
+      currentFlashlightIntensity = maxIntensity;
+
+      flashlight.intensity = currentFlashlightIntensity;
+      flashlightBulb.intensity = currentFlashlightIntensity / 6; // Bulb is dimmer than spotlight
+
+      // Update battery UI
+      updateBatteryUI(1.0);
+
+      // Remove any existing warning
+      const lowBatteryWarning = document.getElementById("lowBatteryWarning");
+      if (lowBatteryWarning) {
+        lowBatteryWarning.remove();
+      }
     } else {
       flashlight.intensity = 0;
       flashlightBulb.intensity = 0;
+
+      // Hide battery UI when flashlight is off
+      const batteryIndicator = document.getElementById("batteryIndicator");
+      if (batteryIndicator) {
+        batteryIndicator.style.display = "none";
+      }
+
+      // Remove any existing warning
+      const lowBatteryWarning = document.getElementById("lowBatteryWarning");
+      if (lowBatteryWarning) {
+        lowBatteryWarning.remove();
+      }
     }
   }
 });
@@ -447,6 +509,100 @@ function updateFlashlight() {
       camera.position.y + cameraDirection.y * 0.5 - 0.2, // Slightly below camera
       camera.position.z + cameraDirection.z * 0.5
     );
+
+    // Handle flashlight dimming effect
+    if (isDimming) {
+      // Calculate time elapsed since dimming started
+      const elapsedTime = (Date.now() - dimmingStartTime) / 1000; // Convert to seconds
+
+      // Calculate current intensity based on elapsed time
+      if (elapsedTime < dimmingDuration) {
+        // Linear interpolation from max to min intensity
+        const dimmingProgress = elapsedTime / dimmingDuration;
+        currentFlashlightIntensity = maxIntensity * (1 - dimmingProgress);
+
+        // Visual feedback when flashlight is getting dim
+        if (
+          currentFlashlightIntensity < 1.0 &&
+          !document.getElementById("lowBatteryWarning")
+        ) {
+          // Create low battery warning element
+          const lowBatteryWarning = document.createElement("div");
+          lowBatteryWarning.id = "lowBatteryWarning";
+          lowBatteryWarning.innerHTML = "Low Battery!";
+          lowBatteryWarning.style.position = "absolute";
+          lowBatteryWarning.style.top = "10%";
+          lowBatteryWarning.style.left = "50%";
+          lowBatteryWarning.style.transform = "translateX(-50%)";
+          lowBatteryWarning.style.color = "#ff3300";
+          lowBatteryWarning.style.fontFamily = "Arial, sans-serif";
+          lowBatteryWarning.style.fontSize = "24px";
+          lowBatteryWarning.style.fontWeight = "bold";
+          lowBatteryWarning.style.textShadow = "0 0 5px rgba(255, 51, 0, 0.7)";
+          lowBatteryWarning.style.padding = "10px";
+          lowBatteryWarning.style.borderRadius = "5px";
+          lowBatteryWarning.style.zIndex = "1000";
+          document.body.appendChild(lowBatteryWarning);
+        }
+      } else {
+        // Flashlight completely dimmed
+        currentFlashlightIntensity = minIntensity;
+        isDimming = false;
+        isRecharging = true;
+        rechargeStartTime = Date.now();
+
+        // Update warning to "Recharging..."
+        const lowBatteryWarning = document.getElementById("lowBatteryWarning");
+        if (lowBatteryWarning) {
+          lowBatteryWarning.innerHTML = "Recharging...";
+          lowBatteryWarning.style.color = "#ffcc00";
+        }
+      }
+    }
+
+    if (isRecharging) {
+      // Calculate time elapsed since recharging started
+      const elapsedRechargeTime = (Date.now() - rechargeStartTime) / 1000; // Convert to seconds
+
+      if (elapsedRechargeTime < rechargeDuration) {
+        // Flashlight is still recharging (stays off during this period)
+        currentFlashlightIntensity = minIntensity;
+      } else {
+        // Recharging complete
+        currentFlashlightIntensity = maxIntensity;
+        isDimming = true;
+        isRecharging = false;
+        dimmingStartTime = Date.now();
+
+        // Remove warning when recharged
+        const lowBatteryWarning = document.getElementById("lowBatteryWarning");
+        if (lowBatteryWarning) {
+          lowBatteryWarning.remove();
+        }
+      }
+    } // Update flashlight and bulb intensities
+    flashlight.intensity = currentFlashlightIntensity;
+    flashlightBulb.intensity = currentFlashlightIntensity / 6; // Bulb is dimmer than spotlight
+
+    // Add random subtle flicker for realism
+    if (currentFlashlightIntensity > 0) {
+      // More dramatic flickering when battery is low
+      const flickerAmount = currentFlashlightIntensity < 1 ? 0.3 : 0.1;
+      const randomFlicker = (Math.random() - 0.5) * flickerAmount;
+      flashlight.intensity += randomFlicker;
+      flashlightBulb.intensity += randomFlicker / 6;
+    }
+
+    // Update battery UI
+    if (isDimming) {
+      const batteryLevel =
+        1 - (Date.now() - dimmingStartTime) / 1000 / dimmingDuration;
+      updateBatteryUI(Math.max(0, Math.min(1, batteryLevel)));
+    } else if (isRecharging) {
+      const rechargeLevel =
+        (Date.now() - rechargeStartTime) / 1000 / rechargeDuration;
+      updateBatteryUI(Math.max(0, Math.min(1, rechargeLevel)));
+    }
   }
 }
 
@@ -482,6 +638,49 @@ backgroundAudioLoader.load(
     console.error("Error loading background horror sound:", error);
   }
 );
+
+// Add random creepy sound effects
+const creepySound = new THREE.Audio(audioListener);
+const creepyAudioLoader = new THREE.AudioLoader();
+let isCreepySoundLoaded = false;
+
+// Load creepy sound effect
+creepyAudioLoader.load(
+  "./public/creepy_sound.mp3",
+  function (buffer) {
+    creepySound.setBuffer(buffer);
+    creepySound.setLoop(false); // Only play once when triggered
+    creepySound.setVolume(0.5); // Set volume level (0.0 to 1.0)
+    isCreepySoundLoaded = true;
+    console.log("Creepy sound effect loaded successfully");
+
+    // Start playing random creepy sounds after user interaction
+    setTimeout(playRandomCreepySound, getRandomInterval());
+  },
+  function (xhr) {
+    console.log(
+      `Creepy sound loading: ${(xhr.loaded / xhr.total) * 100}% loaded`
+    );
+  },
+  function (error) {
+    console.error("Error loading creepy sound effect:", error);
+  }
+);
+
+// Function to play creepy sound at random intervals
+function playRandomCreepySound() {
+  if (isCreepySoundLoaded && !creepySound.isPlaying) {
+    creepySound.play();
+    console.log("Playing random creepy sound effect");
+  }
+  // Schedule next creepy sound
+  setTimeout(playRandomCreepySound, getRandomInterval());
+}
+
+// Get random interval between 30 and 50 seconds
+function getRandomInterval() {
+  return Math.random() * 15000 + 30000;
+}
 
 // Initialize the audio system
 const audioSystem = initAudioSystem(audioListener);
@@ -854,6 +1053,100 @@ cursorDot.style.zIndex = "1000";
 cursorDot.style.opacity = "0.7";
 cursorDot.style.pointerEvents = "none"; // Ensure it doesn't interfere with clicking
 document.body.appendChild(cursorDot);
+
+// Add a battery indicator UI element
+const batteryIndicator = document.createElement("div");
+batteryIndicator.id = "batteryIndicator";
+batteryIndicator.style.position = "absolute";
+batteryIndicator.style.bottom = "30px";
+batteryIndicator.style.right = "30px";
+batteryIndicator.style.width = "150px";
+batteryIndicator.style.height = "20px";
+batteryIndicator.style.border = "2px solid white";
+batteryIndicator.style.borderRadius = "10px";
+batteryIndicator.style.overflow = "hidden";
+batteryIndicator.style.zIndex = "1000";
+
+// Battery level (inner div)
+const batteryLevel = document.createElement("div");
+batteryLevel.id = "batteryLevel";
+batteryLevel.style.height = "100%";
+batteryLevel.style.width = "100%";
+batteryLevel.style.backgroundColor = "#ffcc00";
+batteryLevel.style.transition = "width 0.5s, background-color 0.5s";
+batteryIndicator.appendChild(batteryLevel);
+
+// Battery label
+const batteryLabel = document.createElement("div");
+batteryLabel.id = "batteryLabel";
+batteryLabel.innerHTML = "BATTERY";
+batteryLabel.style.position = "absolute";
+batteryLabel.style.top = "50%";
+batteryLabel.style.left = "50%";
+batteryLabel.style.transform = "translate(-50%, -50%)";
+batteryLabel.style.color = "black";
+batteryLabel.style.fontFamily = "Arial, sans-serif";
+batteryLabel.style.fontSize = "12px";
+batteryLabel.style.fontWeight = "bold";
+batteryLabel.style.textShadow = "0 0 2px rgba(255, 255, 255, 0.7)";
+batteryLabel.style.pointerEvents = "none";
+batteryIndicator.appendChild(batteryLabel);
+
+document.body.appendChild(batteryIndicator);
+
+// Function to update battery UI
+function updateBatteryUI(level) {
+  const batteryLevel = document.getElementById("batteryLevel");
+  const batteryLabel = document.getElementById("batteryLabel");
+  const batteryIndicator = document.getElementById("batteryIndicator");
+
+  // Show battery indicator when flashlight is on
+  if (batteryIndicator && flashlightOn) {
+    batteryIndicator.style.display = "block";
+  }
+
+  if (batteryLevel) {
+    // Update battery level width (0-100%)
+    batteryLevel.style.width = `${level * 100}%`;
+
+    // Change color based on level
+    if (level > 0.6) {
+      batteryLevel.style.backgroundColor = "#33cc33"; // Green
+    } else if (level > 0.3) {
+      batteryLevel.style.backgroundColor = "#ffcc00"; // Yellow
+    } else {
+      batteryLevel.style.backgroundColor = "#ff3300"; // Red
+
+      // Add pulsing effect when battery is low
+      if (level < 0.2) {
+        batteryLevel.style.animation = "pulseBattery 1s infinite";
+        if (!document.getElementById("batteryKeyframes")) {
+          const style = document.createElement("style");
+          style.id = "batteryKeyframes";
+          style.innerHTML = `
+            @keyframes pulseBattery {
+              0% { opacity: 1; }
+              50% { opacity: 0.6; }
+              100% { opacity: 1; }
+            }
+          `;
+          document.head.appendChild(style);
+        }
+      } else {
+        batteryLevel.style.animation = "none";
+      }
+    }
+  }
+
+  // Update label text when recharging
+  if (batteryLabel) {
+    if (isRecharging) {
+      batteryLabel.innerHTML = "CHARGING";
+    } else {
+      batteryLabel.innerHTML = "BATTERY";
+    }
+  }
+}
 
 // Load 5 generators with random positions
 const generatorLoader = new GLTFLoader();
