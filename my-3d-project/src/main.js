@@ -17,7 +17,7 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-camera.position.set(0, 1.6, 5); // Spawn user outside the fence
+camera.position.set(0, 1.6, 15); // Spawn user dekat dengan api unggun
 
 // Lights
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
@@ -166,9 +166,7 @@ fenceLoader.load(
       adjustedFenceHeight / 2,
       mapBoundary
     );
-    scene.add(eastHalfSegment);
-
-    // West side
+    scene.add(eastHalfSegment); // West side
     for (let i = 0; i < segmentCount; i++) {
       const z = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
@@ -178,7 +176,7 @@ fenceLoader.load(
         fenceModelScale
       );
       segment.rotation.y = Math.PI / 2;
-      segment.position.set(-mapBoundary2, adjustedFenceHeight / 2, z);
+      segment.position.set(-mapBoundary, adjustedFenceHeight / 2, z);
       scene.add(segment);
     }
     // Add half-size fence at the end of West side
@@ -519,60 +517,39 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Sofa
-const sofaLoader = new GLTFLoader();
-sofaLoader.load(
-  "./public/sofa_web.glb",
+// Add campfire
+const campfireLoader = new GLTFLoader();
+campfireLoader.load(
+  "./public/campfire.glb",
   (gltf) => {
-    const sofaModel = gltf.scene;
-    sofaModel.position.set(0, 0, 5); // Place the sofa at the user's spawn position
-    sofaModel.scale.set(0.003, 0.003, 0.003); // Reduce the scale of the sofa
-    scene.add(sofaModel);
+    const campfireModel = gltf.scene;
+    campfireModel.position.set(0, 0, 10); // Place the campfire where the sofa was
+    campfireModel.scale.set(2, 2, 2); // Adjust scale as needed
+    scene.add(campfireModel);
+
+    // Add a flickering point light for the campfire
+    const campfireLight = new THREE.PointLight(0xff6600, 2, 10);
+    campfireLight.position.set(0, 1, 10); // Slightly above the campfire
+    scene.add(campfireLight);
+
+    // Create a flickering effect for the campfire light
+    function animateCampfire() {
+      // Random intensity between 1.5 and 2.5
+      campfireLight.intensity = 1.5 + Math.random();
+      setTimeout(animateCampfire, 1000 + Math.random() * 150);
+    }
+    animateCampfire();
+
+    // Add collision detection for campfire
+    const campfireBox = new THREE.Box3().setFromObject(campfireModel);
+    campfireBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
+    graveCollisionBoxes.push(campfireBox); // Use same collision system as graves
+
+    console.log("Campfire loaded successfully");
   },
   undefined,
   (error) => {
-    console.error("Error loading sofa asset:", error);
-  }
-);
-
-const tvLoader = new GLTFLoader();
-tvLoader.load(
-  "./public/tv.glb",
-  (gltf) => {
-    const tvModel = gltf.scene;
-    // Letakkan tv di depan sofa dengan jarak yang cukup
-    tvModel.position.set(5, 3, 7);
-    // Sesuaikan scale sesuai ukuran model
-    tvModel.scale.set(2, 2, 2);
-    // Agar tv menghadap ke arah sofa di posisi (0, 0, 5),
-    // gunakan metode lookAt dengan target posisi sofa
-    tvModel.lookAt(new THREE.Vector3(3, 2, 1));
-    scene.add(tvModel);
-
-    // Membuat video element dan texture
-    const video = document.createElement("video");
-    video.src = "./public/videoTes.mp4"; // Ganti dengan path video yang sesuai
-    video.crossOrigin = "anonymous";
-    video.loop = true;
-    video.muted = true;
-    video.playsInline = true;
-    video.play();
-
-    const videoTexture = new THREE.VideoTexture(video);
-    videoTexture.minFilter = THREE.LinearFilter;
-    videoTexture.magFilter = THREE.LinearFilter;
-    videoTexture.format = THREE.RGBFormat;
-
-    // Asumsikan mesh layar memiliki nama "Screen". Jika tidak, Anda harus menyesuaikan
-    tvModel.traverse((child) => {
-      if (child.isMesh && child.name.toLowerCase().includes("screen")) {
-        child.material = new THREE.MeshBasicMaterial({ map: videoTexture });
-      }
-    });
-  },
-  undefined,
-  (error) => {
-    console.error("Error loading tv asset:", error);
+    console.error("Error loading campfire asset:", error);
   }
 );
 
@@ -583,9 +560,9 @@ bangunanHancurLoader.load(
   (gltf) => {
     const bangunanHancurModel = gltf.scene;
     // Posisikan bangunan hancur di sisi berlawanan dari makam
-    bangunanHancurModel.position.set(10, 0, -10);
+    bangunanHancurModel.position.set(20, 0, -10);
     // Sesuaikan ukuran bangunan hancur
-    bangunanHancurModel.scale.set(1, 1, 1);
+    bangunanHancurModel.scale.set(0.5, 0.5, 0.5);
     // Rotasi agar tampak lebih alami
     bangunanHancurModel.rotation.y = Math.PI / 2; // Rotasi 45 derajat
     scene.add(bangunanHancurModel);
@@ -602,5 +579,53 @@ bangunanHancurLoader.load(
   undefined,
   (error) => {
     console.error("Error loading bangunan hancur asset:", error);
+  }
+);
+
+// Load 5 generators with random positions
+const generatorLoader = new GLTFLoader();
+generatorLoader.load(
+  "./public/generator.glb",
+  (gltf) => {
+    const generatorModel = gltf.scene;
+
+    // Create 5 generators at random positions
+    const generatorPositions = [
+      { x: 5, y: 0.5, z: -10 }, // Position of the first generator
+      { x: 22, y: 0.5, z: -20 }, // Other generators at random positions
+      { x: -14, y: 0.5, z: -25 }, // across the map
+      { x: 15, y: 0.5, z: 25 },
+      { x: -20, y: 0.5, z: 25 },
+    ];
+
+    // Create and add each generator
+    generatorPositions.forEach((pos, index) => {
+      const generatorInstance = generatorModel.clone();
+
+      // Add slight randomization to positions
+      const randomOffset = Math.random() * 3 - 1.5; // Between -1.5 and 1.5
+      pos.x += randomOffset;
+      pos.z += randomOffset;
+
+      // Position the generator and add to scene
+      generatorInstance.position.set(pos.x, pos.y, pos.z);
+      generatorInstance.scale.set(0.01, 0.01, 0.01);
+      generatorInstance.rotation.y = Math.random() * Math.PI * 2; // Random rotation
+      scene.add(generatorInstance);
+
+      // Add collision detection for generator
+      const generatorBox = new THREE.Box3().setFromObject(generatorInstance);
+      generatorBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
+      graveCollisionBoxes.push(generatorBox); // Use same collision system as graves
+
+      console.log(
+        `Generator ${index + 1} loaded successfully at position:`,
+        generatorInstance.position
+      );
+    });
+  },
+  undefined,
+  (error) => {
+    console.error("Error loading generator assets:", error);
   }
 );
