@@ -493,15 +493,123 @@ camera.add(audioListener);
 // Dictionary untuk menyimpan status generator (aktif/nonaktif)
 const generatorStatus = {};
 
-// Memuat suara generator
+// Inisialisasi variabel status untuk audio
+let isAudioLoaded = false;
+
+// Memuat suara generator dengan handling kesalahan
 const generatorSound = new THREE.Audio(audioListener);
 const audioLoader = new THREE.AudioLoader();
-audioLoader.load("./public/suara_generator.mp3", function (buffer) {
-  generatorSound.setBuffer(buffer);
-  generatorSound.setLoop(true);
-  generatorSound.setVolume(0);
-  generatorSound.play(); // Putar dari awal tapi dengan volume 0
-});
+
+// Tambahkan debugging untuk memastikan file audio dimuat dengan benar
+console.log("Loading audio file from:", "./public/suara_generator.mp3");
+
+// Coba beberapa path yang mungkin untuk file audio
+const tryLoadAudio = (paths) => {
+  if (paths.length === 0) {
+    console.error("All audio paths failed, will fallback to generated sound");
+    return;
+  }
+
+  const currentPath = paths[0];
+  const remainingPaths = paths.slice(1);
+
+  console.log(`Trying to load audio from: ${currentPath}`);
+
+  audioLoader.load(
+    currentPath,
+    function (buffer) {
+      generatorSound.setBuffer(buffer);
+      generatorSound.setLoop(true);
+      generatorSound.setVolume(0);
+      generatorSound.play(); // Putar dari awal tapi dengan volume 0
+      isAudioLoaded = true;
+      console.log(`Generator sound loaded successfully from: ${currentPath}`);
+    },
+    function (xhr) {
+      if (xhr.loaded > 0) {
+        console.log(
+          `Audio loading progress from ${currentPath}: ${
+            (xhr.loaded / xhr.total) * 100
+          }%`
+        );
+      }
+    },
+    function (error) {
+      console.error(
+        `Error loading generator sound from ${currentPath}:`,
+        error
+      );
+
+      // Coba path selanjutnya jika ada
+      if (remainingPaths.length > 0) {
+        console.log("Trying next path...");
+        tryLoadAudio(remainingPaths);
+      }
+    }
+  );
+};
+
+// Daftar path yang mungkin untuk mencoba
+const possiblePaths = [
+  "./public/suara_generator.mp3",
+  "/public/suara_generator.mp3",
+  "suara_generator.mp3",
+  "./suara_generator.mp3",
+  "../public/suara_generator.mp3",
+];
+
+// Coba load dari semua path yang mungkin
+tryLoadAudio(possiblePaths);
+
+// Fungsi untuk membuat suara generator sederhana jika file audio tidak bisa dimuat
+function createFallbackSound() {
+  // Buat AudioContext baru
+  const audioContext = THREE.AudioContext.getContext();
+
+  // Panjang buffer (sekitar 1 detik pada 44100 Hz)
+  const bufferSize = audioContext.sampleRate;
+  const buffer = audioContext.createBuffer(
+    1,
+    bufferSize,
+    audioContext.sampleRate
+  );
+
+  // Dapatkan channel data untuk diisi
+  const channelData = buffer.getChannelData(0);
+
+  // Hasilkan suara generator sederhana (white noise dengan modulasi)
+  for (let i = 0; i < bufferSize; i++) {
+    // Gabungkan white noise dengan beberapa frekuensi untuk suara generator
+    const t = i / audioContext.sampleRate;
+    const noise = Math.random() * 0.1;
+    const lowFreq = Math.sin(2 * Math.PI * 50 * t) * 0.05;
+    const midFreq = Math.sin(2 * Math.PI * 120 * t) * 0.03;
+
+    // Modulasi amplitudo
+    const modulation = 0.7 + 0.3 * Math.sin(2 * Math.PI * 4 * t);
+
+    // Gabungkan semua
+    channelData[i] = (noise + lowFreq + midFreq) * modulation;
+  }
+
+  console.log("Created fallback generator sound");
+  return buffer;
+}
+
+// Cek status audio setelah beberapa detik
+setTimeout(() => {
+  if (!isAudioLoaded) {
+    console.warn(
+      "Audio file failed to load after timeout, creating fallback sound"
+    );
+    const fallbackBuffer = createFallbackSound();
+    generatorSound.setBuffer(fallbackBuffer);
+    generatorSound.setLoop(true);
+    generatorSound.setVolume(0);
+    isAudioLoaded = true;
+    console.log("Fallback sound created and ready to use");
+  }
+}, 5000); // Tunggu 5 detik
 
 // Fungsi untuk mengecek jarak ke generator terdekat
 function checkGeneratorProximity() {
@@ -554,34 +662,52 @@ function checkGeneratorProximity() {
     } else {
       promptElement.innerHTML =
         '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
-    }
+    } // Adjust volume based on distance if generator is active
+    if (generatorStatus[closestGenerator.index] && isAudioLoaded) {
+      const volume = Math.min(1.0, 1 - minDistance / 5); // Volume between 0-1 based on distance
+      console.log(
+        `Generator proximity: setting volume to ${volume} (distance: ${minDistance})`
+      );
 
-    // Adjust volume based on distance if generator is active
-    if (generatorStatus[closestGenerator.index]) {
-      const volume = 1 - minDistance / 5; // Volume between 0-1 based on distance
+      // Ensure the sound is playing
+      if (!generatorSound.isPlaying) {
+        generatorSound.play();
+      }
+
       generatorSound.setVolume(volume);
     }
 
     return closestGenerator;
   } else {
     // Hide prompt when not looking at any generator
-    document.getElementById("interactionPrompt").style.display = "none";
-
-    // Check for active generators in radius for sound adjustment
+    document.getElementById("interactionPrompt").style.display = "none"; // Check for active generators in radius for sound adjustment
     let activeVolumeSet = false;
-    generatorObjects.forEach((generator, index) => {
-      if (generatorStatus[index]) {
-        const distance = playerPos.distanceTo(generator.position);
-        if (distance <= 5) {
-          const volume = 1 - distance / 5;
-          generatorSound.setVolume(volume);
-          activeVolumeSet = true;
-        }
-      }
-    });
 
-    if (!activeVolumeSet) {
-      generatorSound.setVolume(0); // No audible generators
+    if (isAudioLoaded) {
+      generatorObjects.forEach((generator, index) => {
+        if (generatorStatus[index]) {
+          const distance = playerPos.distanceTo(generator.position);
+          if (distance <= 5) {
+            const volume = Math.min(1.0, 1 - distance / 5);
+            console.log(
+              `Active generator nearby: setting volume to ${volume} (distance: ${distance})`
+            );
+
+            // Ensure the sound is playing
+            if (!generatorSound.isPlaying) {
+              generatorSound.play();
+            }
+
+            generatorSound.setVolume(volume);
+            activeVolumeSet = true;
+          }
+        }
+      });
+
+      if (!activeVolumeSet && generatorSound.isPlaying) {
+        console.log("No audible generators nearby, volume set to 0");
+        generatorSound.setVolume(0); // No audible generators
+      }
     }
 
     return null;
@@ -604,7 +730,6 @@ document.addEventListener("keydown", (e) => {
       setTimeout(() => {
         promptElement.style.transform = "translateX(-50%) scale(0.95)";
       }, 100);
-
       if (generatorStatus[index]) {
         console.log(`Generator ${index + 1} diaktifkan!`);
 
@@ -614,12 +739,26 @@ document.addEventListener("keydown", (e) => {
         promptElement.innerHTML =
           '<span style="color: #00ff00;">[E]</span> Generator Aktif';
 
-        // Audio sudah diplay di awal, hanya perlu mengatur volume
-        const distance = controls
-          .getObject()
-          .position.distanceTo(closestGenerator.position);
-        const volume = 1 - distance / 5;
-        generatorSound.setVolume(volume);
+        // Pastikan audio sudah dimuat sebelum memutar
+        if (isAudioLoaded) {
+          // Jika tidak sedang diputar, putar ulang
+          if (!generatorSound.isPlaying) {
+            generatorSound.play();
+          }
+
+          // Audio sudah diplay di awal, hanya perlu mengatur volume
+          const distance = controls
+            .getObject()
+            .position.distanceTo(closestGenerator.position);
+          const volume = Math.min(1.0, 1 - distance / 5); // Pastikan volume tidak melebihi 1.0
+
+          console.log(
+            `Setting generator sound volume to: ${volume} (distance: ${distance})`
+          );
+          generatorSound.setVolume(volume);
+        } else {
+          console.warn("Audio not loaded yet, cannot play generator sound");
+        }
 
         // Reset visual style after feedback
         setTimeout(() => {
@@ -639,16 +778,22 @@ document.addEventListener("keydown", (e) => {
         promptElement.innerHTML =
           '<span style="color: #ff0000;">[E]</span> Generator Nonaktif';
 
-        // Gradually reduce volume
-        const fadeInterval = setInterval(() => {
-          const currentVolume = generatorSound.getVolume();
-          if (currentVolume > 0.05) {
-            generatorSound.setVolume(currentVolume - 0.05);
-          } else {
-            generatorSound.setVolume(0);
-            clearInterval(fadeInterval);
-          }
-        }, 50);
+        // Gradually reduce volume if audio is loaded
+        if (isAudioLoaded) {
+          const fadeInterval = setInterval(() => {
+            const currentVolume = generatorSound.getVolume();
+            if (currentVolume > 0.05) {
+              generatorSound.setVolume(currentVolume - 0.05);
+              console.log(
+                `Fading out generator sound: ${currentVolume - 0.05}`
+              );
+            } else {
+              generatorSound.setVolume(0);
+              clearInterval(fadeInterval);
+              console.log("Generator sound volume set to 0");
+            }
+          }, 50);
+        }
 
         // Reset UI after feedback
         setTimeout(() => {

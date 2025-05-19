@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <title>3D First Person</title>
     <style>
-      body, html {
+      body,
+      html {
         margin: 0;
         overflow: hidden;
       }
@@ -15,6 +16,47 @@
   </head>
   <body>
     <canvas id="bg"></canvas>
+    <!-- Preload audio files -->
+    <audio
+      id="generatorAudioPreload"
+      preload="auto"
+      src="./public/suara_generator.mp3"
+      style="display: none"
+    ></audio>
+
     <script type="module" src="./src/main.js"></script>
+
+    <!-- Script untuk memutar audio pertama kali agar izin audio browser aktif -->
+    <script>
+      // Atasi masalah kebijakan autoplay browser dengan user interaction
+      document.addEventListener("click", initAudio, { once: true });
+
+      function initAudio() {
+        // Coba memainkan audio yang di-preload untuk menyiapkan konteks audio
+        const audioPreload = document.getElementById("generatorAudioPreload");
+
+        if (audioPreload) {
+          audioPreload.volume = 0; // Set volume ke 0 agar tidak terdengar
+
+          // Play dan pause secara cepat untuk memastikan konteks audio diinisialisasi
+          const playPromise = audioPreload.play();
+
+          if (playPromise !== undefined) {
+            playPromise
+              .then((_) => {
+                // Autoplay berhasil
+                setTimeout(() => {
+                  audioPreload.pause();
+                  console.log("Audio context initialized successfully");
+                }, 10);
+              })
+              .catch((error) => {
+                // Autoplay failed/tidak diizinkan
+                console.warn("Audio autoplay failed:", error);
+              });
+          }
+        }
+      }
+    </script>
   </body>
 </html>
