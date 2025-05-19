@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { addBrickWalls } from "./walls.js";
+import { initAudioSystem } from "./generatorAudio.js";
 
 const canvas = document.getElementById("bg");
 const renderer = new THREE.WebGLRenderer({ canvas });
@@ -490,15 +492,45 @@ const generatorObjects = [];
 const audioListener = new THREE.AudioListener();
 camera.add(audioListener);
 
+// Initialize the audio system
+const audioSystem = initAudioSystem(audioListener);
+const isAudioSystemReady = () => audioSystem.getAudioLoadStatus();
+
 // Dictionary untuk menyimpan status generator (aktif/nonaktif)
 const generatorStatus = {};
 
-// Inisialisasi variabel status untuk audio
-let isAudioLoaded = false;
-
-// Memuat suara generator dengan handling kesalahan
-const generatorSound = new THREE.Audio(audioListener);
+// Create a positional audio object rather than a standard audio object
+// This will allow for proper 3D spatial audio
+const generatorSound = new THREE.PositionalAudio(audioListener);
 const audioLoader = new THREE.AudioLoader();
+
+// Configure audio for better spatial positioning
+// These settings will make the sound more directional and have improved distance falloff
+const configureSpatialAudio = () => {
+  if (generatorSound && generatorSound.panner) {
+    // Set how quickly the volume reduces as source moves away
+    generatorSound.setDistanceModel("exponential");
+
+    // Set the maximum distance at which the sound can be heard
+    generatorSound.setMaxDistance(25);
+
+    // Set reference distance for reducing volume
+    generatorSound.setRefDistance(1);
+
+    // Set how quickly the sound gets quieter based on source/listener angle
+    generatorSound.setRolloffFactor(1.2);
+
+    // Set directional sound cone for more realistic position (optional)
+    // More focused at source, gradually spreading out
+    generatorSound.setDirectionalCone(180, 230, 0.8);
+
+    console.log(
+      "Spatial audio settings configured for improved distance-based audio"
+    );
+  } else {
+    console.warn("Could not configure spatial audio - panner not available");
+  }
+};
 
 // Tambahkan debugging untuk memastikan file audio dimuat dengan benar
 console.log("Loading audio file from:", "./public/suara_generator.mp3");
@@ -514,13 +546,16 @@ const tryLoadAudio = (paths) => {
   const remainingPaths = paths.slice(1);
 
   console.log(`Trying to load audio from: ${currentPath}`);
-
   audioLoader.load(
     currentPath,
     function (buffer) {
       generatorSound.setBuffer(buffer);
       generatorSound.setLoop(true);
       generatorSound.setVolume(0);
+
+      // Apply spatial audio configuration
+      configureSpatialAudio();
+
       generatorSound.play(); // Putar dari awal tapi dengan volume 0
       isAudioLoaded = true;
       console.log(`Generator sound loaded successfully from: ${currentPath}`);
@@ -606,6 +641,10 @@ setTimeout(() => {
     generatorSound.setBuffer(fallbackBuffer);
     generatorSound.setLoop(true);
     generatorSound.setVolume(0);
+
+    // Apply spatial audio configuration to fallback sound
+    configureSpatialAudio();
+
     isAudioLoaded = true;
     console.log("Fallback sound created and ready to use");
   }
@@ -629,87 +668,80 @@ function checkGeneratorProximity() {
   generatorObjects.forEach((generator, index) => {
     const distance = playerPos.distanceTo(generator.position);
 
-    // Check if generator is within interaction radius
-    if (distance <= 5) {
-      // Calculate normalized vector from player to generator
-      const directionToGenerator = new THREE.Vector3()
-        .subVectors(generator.position, playerPos)
-        .normalize();
+    // Increased interaction radius for audio detection
+    const interactionRadius = 20; // Increased to make generators easier to find
+    const visualInteractionRadius = 5; // Keep visual/interaction radius at 5
 
-      // Calculate cosine of angle between camera direction and direction to generator
-      const dotProduct = cameraDirection.dot(directionToGenerator);
+    // Use the larger radius for audio detection
+    if (distance <= interactionRadius) {
+      // If within visual interaction radius, allow player interaction with cursor
+      if (distance <= visualInteractionRadius) {
+        // Calculate normalized vector from player to generator
+        const directionToGenerator = new THREE.Vector3()
+          .subVectors(generator.position, playerPos)
+          .normalize();
 
-      // Player is looking at generator if dot product exceeds threshold
-      if (dotProduct > lookingThreshold) {
-        isLookingAtGenerator = true;
+        // Calculate cosine of angle between camera direction and direction to generator
+        const dotProduct = cameraDirection.dot(directionToGenerator);
+
+        // Player is looking at generator if dot product exceeds threshold
+        if (dotProduct > lookingThreshold) {
+          isLookingAtGenerator = true;
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestGenerator = { position: generator.position, index: index };
+          }
+        }
+      }
+      // For audio, we keep track of all generators within the larger audio radius
+      else if (generatorStatus[index] && isAudioSystemReady()) {
+        // For audio-only detection, we don't require the player to be looking at it
         if (distance < minDistance) {
           minDistance = distance;
-          closestGenerator = { position: generator.position, index: index };
+          // Mark this as an audio-only detection (not for interaction)
+          closestGenerator = {
+            position: generator.position,
+            index: index,
+            audioOnly: true,
+          };
         }
       }
     }
   });
 
-  // Only show prompt when player is correctly looking at a generator (using cursor)
-  if (minDistance <= 5 && closestGenerator && isLookingAtGenerator) {
-    const promptElement = document.getElementById("interactionPrompt");
-    promptElement.style.display = "block";
+  // Always update audio system with player position
+  if (isAudioSystemReady()) {
+    audioSystem.updateGeneratorSounds(playerPos);
+  }
 
-    // Show different prompt based on generator status
-    if (generatorStatus[closestGenerator.index]) {
-      promptElement.innerHTML =
-        '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
-    } else {
-      promptElement.innerHTML =
-        '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
-    } // Adjust volume based on distance if generator is active
-    if (generatorStatus[closestGenerator.index] && isAudioLoaded) {
-      const volume = Math.min(1.0, 1 - minDistance / 5); // Volume between 0-1 based on distance
-      console.log(
-        `Generator proximity: setting volume to ${volume} (distance: ${minDistance})`
-      );
+  // Check if we found a generator (for interaction or audio)
+  if (closestGenerator) {
+    // Handle visual interaction if within visual interaction radius and looking at generator
+    if (
+      minDistance <= 5 &&
+      isLookingAtGenerator &&
+      !closestGenerator.audioOnly
+    ) {
+      const promptElement = document.getElementById("interactionPrompt");
+      promptElement.style.display = "block";
 
-      // Ensure the sound is playing
-      if (!generatorSound.isPlaying) {
-        generatorSound.play();
+      // Show different prompt based on generator status
+      if (generatorStatus[closestGenerator.index]) {
+        promptElement.innerHTML =
+          '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
+      } else {
+        promptElement.innerHTML =
+          '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
       }
-
-      generatorSound.setVolume(volume);
+    } else {
+      // Hide prompt when not looking at any generator
+      document.getElementById("interactionPrompt").style.display = "none";
     }
 
     return closestGenerator;
   } else {
     // Hide prompt when not looking at any generator
-    document.getElementById("interactionPrompt").style.display = "none"; // Check for active generators in radius for sound adjustment
-    let activeVolumeSet = false;
-
-    if (isAudioLoaded) {
-      generatorObjects.forEach((generator, index) => {
-        if (generatorStatus[index]) {
-          const distance = playerPos.distanceTo(generator.position);
-          if (distance <= 5) {
-            const volume = Math.min(1.0, 1 - distance / 5);
-            console.log(
-              `Active generator nearby: setting volume to ${volume} (distance: ${distance})`
-            );
-
-            // Ensure the sound is playing
-            if (!generatorSound.isPlaying) {
-              generatorSound.play();
-            }
-
-            generatorSound.setVolume(volume);
-            activeVolumeSet = true;
-          }
-        }
-      });
-
-      if (!activeVolumeSet && generatorSound.isPlaying) {
-        console.log("No audible generators nearby, volume set to 0");
-        generatorSound.setVolume(0); // No audible generators
-      }
-    }
-
+    document.getElementById("interactionPrompt").style.display = "none";
     return null;
   }
 }
@@ -723,14 +755,21 @@ document.addEventListener("keydown", (e) => {
       const promptElement = document.getElementById("interactionPrompt");
 
       // Toggle status generator
-      generatorStatus[index] = !generatorStatus[index];
+      const newStatus = !generatorStatus[index];
+      generatorStatus[index] = newStatus;
+
+      // Update status in the audio system
+      if (isAudioSystemReady()) {
+        audioSystem.setGeneratorStatus(index, newStatus);
+      }
 
       // Visual feedback animation for the prompt
       promptElement.style.transform = "translateX(-50%) scale(1.1)";
       setTimeout(() => {
         promptElement.style.transform = "translateX(-50%) scale(0.95)";
       }, 100);
-      if (generatorStatus[index]) {
+
+      if (newStatus) {
         console.log(`Generator ${index + 1} diaktifkan!`);
 
         // Tambahkan visual feedback saat generator aktif
@@ -738,27 +777,6 @@ document.addEventListener("keydown", (e) => {
         promptElement.style.boxShadow = "0 0 15px rgba(0, 255, 0, 0.6)";
         promptElement.innerHTML =
           '<span style="color: #00ff00;">[E]</span> Generator Aktif';
-
-        // Pastikan audio sudah dimuat sebelum memutar
-        if (isAudioLoaded) {
-          // Jika tidak sedang diputar, putar ulang
-          if (!generatorSound.isPlaying) {
-            generatorSound.play();
-          }
-
-          // Audio sudah diplay di awal, hanya perlu mengatur volume
-          const distance = controls
-            .getObject()
-            .position.distanceTo(closestGenerator.position);
-          const volume = Math.min(1.0, 1 - distance / 5); // Pastikan volume tidak melebihi 1.0
-
-          console.log(
-            `Setting generator sound volume to: ${volume} (distance: ${distance})`
-          );
-          generatorSound.setVolume(volume);
-        } else {
-          console.warn("Audio not loaded yet, cannot play generator sound");
-        }
 
         // Reset visual style after feedback
         setTimeout(() => {
@@ -777,23 +795,6 @@ document.addEventListener("keydown", (e) => {
         promptElement.style.boxShadow = "0 0 15px rgba(255, 0, 0, 0.6)";
         promptElement.innerHTML =
           '<span style="color: #ff0000;">[E]</span> Generator Nonaktif';
-
-        // Gradually reduce volume if audio is loaded
-        if (isAudioLoaded) {
-          const fadeInterval = setInterval(() => {
-            const currentVolume = generatorSound.getVolume();
-            if (currentVolume > 0.05) {
-              generatorSound.setVolume(currentVolume - 0.05);
-              console.log(
-                `Fading out generator sound: ${currentVolume - 0.05}`
-              );
-            } else {
-              generatorSound.setVolume(0);
-              clearInterval(fadeInterval);
-              console.log("Generator sound volume set to 0");
-            }
-          }, 50);
-        }
 
         // Reset UI after feedback
         setTimeout(() => {
@@ -855,13 +856,14 @@ generatorLoader.load(
   (gltf) => {
     const generatorModel = gltf.scene;
 
-    // Create 5 generators at random positions
+    // Create 5 generators at strategic positions across the map
+    // Increased distances to utilize our improved audio system
     const generatorPositions = [
-      { x: 5, y: 0.5, z: -10 }, // Position of the first generator
-      { x: 22, y: 0.5, z: -20 }, // Other generators at random positions
-      { x: -14, y: 0.5, z: -25 }, // across the map
-      { x: 15, y: 0.5, z: 25 },
-      { x: -20, y: 0.5, z: 25 },
+      { x: 5, y: 0.5, z: -10 }, // First generator
+      { x: 22, y: 0.5, z: -20 }, // Northeast generator
+      { x: -14, y: 0.5, z: -25 }, // Northwest generator
+      { x: 15, y: 0.5, z: 25 }, // Southeast generator
+      { x: -20, y: 0.5, z: 25 }, // Southwest generator
     ];
 
     // Create and add each generator
@@ -871,13 +873,27 @@ generatorLoader.load(
       // Add slight randomization to positions
       const randomOffset = Math.random() * 3 - 1.5; // Between -1.5 and 1.5
       pos.x += randomOffset;
-      pos.z += randomOffset; // Position the generator and add to scene
+      pos.z += randomOffset;
+
+      // Position the generator and add to scene
       generatorInstance.position.set(pos.x, pos.y, pos.z);
-      generatorInstance.scale.set(0.01, 0.01, 0.01);
-      generatorInstance.rotation.y = Math.random() * Math.PI * 2; // Random rotation
-      scene.add(generatorInstance); // Simpan referensi generator untuk interaksi
+      generatorInstance.scale.set(0.01, 0.01, 0.01); // Create a unique ID for this generator
+      generatorInstance.userData.generatorId = `generator-${index}`;
+
+      scene.add(generatorInstance);
+
+      // Store reference for interaction
       generatorObjects.push(generatorInstance);
       generatorStatus[index] = false; // Set status awal ke nonaktif
+
+      // Attach audio to this generator
+      if (isAudioSystemReady()) {
+        audioSystem.attachSoundToGenerator(
+          generatorInstance,
+          index,
+          audioListener
+        );
+      }
 
       // Add collision detection for generator
       const generatorBox = new THREE.Box3().setFromObject(generatorInstance);
@@ -896,6 +912,10 @@ generatorLoader.load(
   }
 );
 
+// Add brick and stone walls to the scene using the modular wall system
+// This uses a comprehensive array of wall positions stored in the walls.js module
+addBrickWalls(scene, graveCollisionBoxes);
+
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
   requestAnimationFrame(animate);
@@ -913,9 +933,7 @@ function animate() {
     handleJump(delta);
     handleStairsCollision();
     handleFenceCollision();
-    handleGraveCollision(previousPos);
-
-    // Check generator proximity for interaction and update cursor
+    handleGraveCollision(previousPos); // Check generator proximity for interaction and update cursor
     const closestGenerator = checkGeneratorProximity();
 
     // Update cursor dot color based on whether player is looking at a generator
