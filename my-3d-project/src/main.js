@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { addBrickWalls } from "./walls.js";
 import { initAudioSystem } from "./generatorAudio.js";
 
 const canvas = document.getElementById("bg");
@@ -10,21 +9,21 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000010); // Lebih gelap dari sebelumnya
+scene.background = new THREE.Color(0x000033); // Dark blue for night
 
 // Camera
 const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
-  0.0001,
+  0.1,
   1000
 );
 camera.position.set(0, 1.6, 15); // Spawn user dekat dengan api unggun
 
 // Lights
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.01);
-ambientLight.intensity = 0.001; // Hampir tidak ada cahaya ambient
-ambientLight.color.set(0x222233); // Biru gelap
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+ambientLight.intensity = 0.05; // Almost no ambient light
+ambientLight.color.set(0x404040); // Softer, cooler light
 scene.add(ambientLight);
 
 // Set all main lights to zero so the scene is dark except for flashlight
@@ -73,8 +72,8 @@ scene.remove(floor);
 // Ubah batas map menjadi lebih kecil
 const mapBoundary = 30; // Map dari -30 sampai 30 pada sumbu x dan z
 const fenceHeight = 1;
-const fenceLength = 0.4;
-const fenceModelScale = 0.2;
+const fenceLength = 1;
+const fenceModelScale = 1;
 
 const adjustedFenceHeight = fenceHeight * fenceModelScale;
 const adjustedFenceLength = fenceLength * fenceModelScale;
@@ -86,12 +85,12 @@ const step = totalLength / segmentCount;
 
 const fenceLoader = new GLTFLoader();
 fenceLoader.load(
-  "./public/fence_1.glb",
+  "./public/brick_and_stone_wall.glb",
   (gltf) => {
     const fenceModel = gltf.scene;
 
     // North side
-    for (let i = 0; i < segmentCount; i++) {
+    for (let i = 0; i < segmentCount; i = i + 2) {
       const x = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -99,7 +98,7 @@ fenceLoader.load(
         adjustedFenceHeight,
         fenceModelScale
       );
-      segment.position.set(x, adjustedFenceHeight / 2, -mapBoundary + 1);
+      segment.position.set(x, adjustedFenceHeight / 2, -mapBoundary - 1);
       scene.add(segment);
     }
     // Add half-size fence at the end of North side
@@ -112,12 +111,12 @@ fenceLoader.load(
     northHalfSegment.position.set(
       mapBoundary,
       adjustedFenceHeight / 2,
-      -mapBoundary + 1
+      -mapBoundary - 1
     );
     scene.add(northHalfSegment);
 
     // South side
-    for (let i = 0; i < segmentCount; i++) {
+    for (let i = -2; i < segmentCount; i = i + 2) {
       const x = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -128,22 +127,9 @@ fenceLoader.load(
       segment.position.set(x, adjustedFenceHeight / 2, mapBoundary + 1);
       scene.add(segment);
     }
-    // Add half-size fence at the end of South side
-    const southHalfSegment = fenceModel.clone();
-    southHalfSegment.scale.set(
-      adjustedFenceLength / 2,
-      adjustedFenceHeight,
-      fenceModelScale
-    );
-    southHalfSegment.position.set(
-      mapBoundary,
-      adjustedFenceHeight / 2,
-      mapBoundary + 1
-    );
-    scene.add(southHalfSegment);
 
     // East side
-    for (let i = -1; i <= segmentCount; i++) {
+    for (let i = 0; i <= segmentCount + 2; i = i + 2) {
       const z = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -155,21 +141,8 @@ fenceLoader.load(
       segment.position.set(mapBoundary, adjustedFenceHeight / 2, z);
       scene.add(segment);
     }
-    // Add half-size fence at the end of East side
-    const eastHalfSegment = fenceModel.clone();
-    eastHalfSegment.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale / 2
-    );
-    eastHalfSegment.rotation.y = Math.PI / 2;
-    eastHalfSegment.position.set(
-      mapBoundary,
-      adjustedFenceHeight / 2,
-      mapBoundary
-    );
-    scene.add(eastHalfSegment); // West side
-    for (let i = 0; i < segmentCount; i++) {
+    // West side
+    for (let i = 0; i <= segmentCount + 2; i = i + 2) {
       const z = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -181,20 +154,6 @@ fenceLoader.load(
       segment.position.set(-mapBoundary, adjustedFenceHeight / 2, z);
       scene.add(segment);
     }
-    // Add half-size fence at the end of West side
-    const westHalfSegment = fenceModel.clone();
-    westHalfSegment.scale.set(
-      adjustedFenceLength,
-      adjustedFenceHeight,
-      fenceModelScale / 2
-    );
-    westHalfSegment.rotation.y = Math.PI / 2;
-    westHalfSegment.position.set(
-      -mapBoundary,
-      adjustedFenceHeight / 2,
-      mapBoundary
-    );
-    scene.add(westHalfSegment);
   },
   undefined,
   (error) => {
@@ -294,7 +253,7 @@ function handleGraveCollision(previousPos) {
 // Fungsi untuk menangani collision fence dengan cara membatasi posisi pemain
 function handleFenceCollision() {
   const playerPos = controls.getObject().position;
-  const margin = 1; // margin kecil agar pemain tidak terlalu dekat dengan fence
+  const margin = 0.5; // reduced margin to allow player to get closer to walls
 
   // Only restrict movement if the player is within the map boundaries
   if (
@@ -368,6 +327,12 @@ scene.add(controls.getObject());
 
 document.addEventListener("click", () => {
   controls.lock();
+
+  // Play background horror sound on user interaction
+  if (isBackgroundAudioLoaded && !backgroundSound.isPlaying) {
+    backgroundSound.play();
+    console.log("Background horror sound started playing");
+  }
 });
 
 // Movement
@@ -491,6 +456,32 @@ const generatorObjects = [];
 // Load audio untuk generator
 const audioListener = new THREE.AudioListener();
 camera.add(audioListener);
+
+// Add background horror atmosphere sound
+const backgroundSound = new THREE.Audio(audioListener);
+const backgroundAudioLoader = new THREE.AudioLoader();
+let isBackgroundAudioLoaded = false;
+
+// Load and play background horror sound
+backgroundAudioLoader.load(
+  "./public/horror atmosphere.mp3",
+  function (buffer) {
+    backgroundSound.setBuffer(buffer);
+    backgroundSound.setLoop(true);
+    backgroundSound.setVolume(0.3); // Set volume level (0.0 to 1.0)
+    isBackgroundAudioLoaded = true;
+    // Don't play automatically - we'll play on user interaction
+    console.log("Background horror sound loaded successfully");
+  },
+  function (xhr) {
+    console.log(
+      `Background audio loading: ${(xhr.loaded / xhr.total) * 100}% loaded`
+    );
+  },
+  function (error) {
+    console.error("Error loading background horror sound:", error);
+  }
+);
 
 // Initialize the audio system
 const audioSystem = initAudioSystem(audioListener);
@@ -929,9 +920,13 @@ generatorLoader.load(
 
 // --- TREE SPAWNING WITH SPACING AND COLLISION ---
 const treeTypes = [
-  { file: "./public/ancient_tree.glb", count: 25, scale: [0.007, 0.007, 0.007] },
+  {
+    file: "./public/ancient_tree.glb",
+    count: 20, // Increased from 10
+    scale: [0.01, 0.01, 0.01],
+  },
   // { file: "./public/oak_tree.glb", count: 25, scale: [5, 5, 5] },
-  { file: "./public/tree_1.glb", count: 75, scale: [0.4, 0.5, 0.4] },
+  { file: "./public/tree_1.glb", count: 20, scale: [0.7, 0.7, 0.7] }, // Increased from 12
 ];
 
 const treeLoader = new GLTFLoader();
@@ -948,17 +943,12 @@ function addImportantBoxFromObject(obj) {
 }
 generatorObjects.forEach(addImportantBoxFromObject);
 // Campfire
-let campfireBox = null;
-if (typeof campfireModel !== "undefined") {
-  campfireBox = new THREE.Box3().setFromObject(campfireModel);
-  importantBoxes.push(campfireBox);
-}
-// Bangunan hancur
-let bangunanHancurBox = null;
-if (typeof bangunanHancurModel !== "undefined") {
-  bangunanHancurBox = new THREE.Box3().setFromObject(bangunanHancurModel);
-  importantBoxes.push(bangunanHancurBox);
-}
+// let campfireBox = null;
+// if (typeof campfireModel !== "undefined") {
+//   campfireBox = new THREE.Box3().setFromObject(campfireModel);
+//   importantBoxes.push(campfireBox);
+// }
+// Bangunan hancur reference removed
 // Graveyard
 for (const box of graveCollisionBoxes) {
   importantBoxes.push(box.clone());
@@ -1062,123 +1052,6 @@ treeTypes.forEach((treeType) => {
 });
 // --- END TREE SPAWNING ---
 
-// --- STREET LAMP SPAWNING WITH LIGHT & COLLISION ---
-const streetLampLoader = new GLTFLoader();
-const streetLampCount = 5;
-const streetLampScale = [1.7, 1.7, 1.7];
-const placedLampPositions = [];
-
-function isFarFromOtherLamps(x, z) {
-  for (const pos of placedLampPositions) {
-    const dx = x - pos.x;
-    const dz = z - pos.z;
-    if (Math.sqrt(dx * dx + dz * dz) < 8) return false;
-  }
-  return true;
-}
-
-function getRandomLampPositionSafe() {
-  let x, z, tries = 0;
-  let valid = false;
-  while (!valid && tries < 200) {
-    x = Math.random() * (mapBoundary * 2) - mapBoundary;
-    z = Math.random() * (mapBoundary * 2) - mapBoundary;
-    tries++;
-    valid =
-      isFarFromOtherLamps(x, z) &&
-      isFarFromOtherTrees(x, z) &&
-      isFarFromImportantObjects(x, z);
-  }
-  if (!valid) {
-    x = (Math.random() < 0.5 ? -1 : 1) * (mapBoundary - 3);
-    z = (Math.random() < 0.5 ? -1 : 1) * (mapBoundary - 3);
-  }
-  return { x, y: 0, z };
-}
-
-streetLampLoader.load(
-  './public/standart_street_lamp.glb',
-  (gltf) => {
-    for (let i = 0; i < streetLampCount; i++) {
-      const lamp = gltf.scene.clone();
-      const pos = getRandomLampPositionSafe();
-      lamp.position.set(pos.x, pos.y, pos.z);
-      lamp.scale.set(...streetLampScale);
-      lamp.rotation.y = Math.random() * Math.PI * 2;
-      scene.add(lamp);
-      placedLampPositions.push({ x: pos.x, z: pos.z });
-      // Tambahkan collision box hanya pada tiang lampu (trunk/pole)
-      let lampBox = null;
-      let pole = lamp.getObjectByName('trunk') || lamp.getObjectByName('Trunk') || lamp.getObjectByName('pole') || lamp.getObjectByName('Pole');
-      if (pole) {
-        lampBox = new THREE.Box3().setFromObject(pole);
-      } else {
-        lampBox = new THREE.Box3().setFromObject(lamp);
-        const center = new THREE.Vector3();
-        lampBox.getCenter(center);
-        const size = new THREE.Vector3();
-        lampBox.getSize(size);
-        size.x *= 0.25;
-        size.z *= 0.25;
-        lampBox.min.x = center.x - size.x / 2;
-        lampBox.max.x = center.x + size.x / 2;
-        lampBox.min.z = center.z - size.z / 2;
-        lampBox.max.z = center.z + size.z / 2;
-      }
-      graveCollisionBoxes.push(lampBox);
-      // Tambahkan lampu menyala di atas lampu jalan
-      // Cari node "lamp_head" atau "Lamp_Head" jika ada, jika tidak pakai posisi paling atas
-      let lampHead = lamp.getObjectByName('lamp_head') || lamp.getObjectByName('Lamp_Head');
-      let lampLightPos;
-      if (lampHead) {
-        lampHead.updateWorldMatrix(true, false);
-        lampLightPos = new THREE.Vector3();
-        lampHead.getWorldPosition(lampLightPos);
-      } else {
-        // Ambil bounding box paling atas
-        lampBox.getCenter(lampLightPos = new THREE.Vector3());
-        lampLightPos.y = lampBox.max.y + 0.5;
-      }
-      const lampLight = new THREE.PointLight(0xfff2b0, 2.5, 7, 2);
-      lampLight.position.copy(lampLightPos);
-      lampLight.castShadow = false;
-      scene.add(lampLight);
-      // Tambahkan efek glow (optional):
-      const lampGlow = new THREE.PointLight(0xfff2b0, 0.7, 5);
-      lampGlow.position.copy(lampLightPos);
-      scene.add(lampGlow);
-    }
-    console.log('Street lamps loaded and scattered around the map');
-  },
-  undefined,
-  (error) => {
-    console.error('Error loading street lamp asset:', error);
-  }
-);
-// --- END STREET LAMP SPAWNING ---
-
-// Tambahkan spooky_bear.glb di area kosong map (pojok barat daya, scale kecil)
-const spookyBearLoader = new GLTFLoader();
-spookyBearLoader.load(
-  './public/spooky_bear.glb',
-  (gltf) => {
-    const bear = gltf.scene;
-    // Posisi tetap di area kosong, misal (-27, 0, 27)
-    bear.position.set(-27, 0, 27);
-    bear.scale.set(0.001, 0.0018, 0.0018); // Kecil
-    bear.rotation.y = Math.PI / 4; // Sedikit miring biar natural
-    scene.add(bear);
-    // Tambahkan collision box untuk bear
-    const bearBox = new THREE.Box3().setFromObject(bear);
-    graveCollisionBoxes.push(bearBox);
-    console.log('Spooky bear loaded at (-27, 0, 27)');
-  },
-  undefined,
-  (error) => {
-    console.error('Error loading spooky_bear asset:', error);
-  }
-);
-
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
   requestAnimationFrame(animate);
@@ -1231,66 +1104,126 @@ window.addEventListener("resize", () => {
 });
 
 // Add campfire
-const campfireLoader = new GLTFLoader();
-campfireLoader.load(
-  "./public/campfire.glb",
+// const campfireLoader = new GLTFLoader();
+// campfireLoader.load(
+//   "./public/campfire.glb",
+//   (gltf) => {
+//     const campfireModel = gltf.scene;
+//     campfireModel.position.set(0, 0, 10); // Place the campfire where the sofa was
+//     campfireModel.scale.set(2, 2, 2); // Adjust scale as needed
+//     scene.add(campfireModel);
+
+//     // Add a flickering point light for the campfire
+//     const campfireLight = new THREE.PointLight(0xff6600, 2, 10);
+//     campfireLight.position.set(0, 1, 10); // Slightly above the campfire
+//     scene.add(campfireLight);
+
+//     // Create a flickering effect for the campfire light
+//     function animateCampfire() {
+//       // Random intensity between 1.5 and 2.5
+//       campfireLight.intensity = 1.5 + Math.random();
+//       setTimeout(animateCampfire, 1000 + Math.random() * 150);
+//     }
+//     animateCampfire();
+
+//     // Add collision detection for campfire
+//     const campfireBox = new THREE.Box3().setFromObject(campfireModel);
+//     campfireBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
+//     graveCollisionBoxes.push(campfireBox); // Use same collision system as graves
+
+//     console.log("Campfire loaded successfully");
+//   },
+//   undefined,
+//   (error) => {
+//     console.error("Error loading campfire asset:", error);
+//   }
+// );
+
+// Bangunan hancur has been removed
+
+// Add street lamps around the map
+const streetLampLoader = new GLTFLoader();
+streetLampLoader.load(
+  "./public/standart_street_lamp.glb",
   (gltf) => {
-    const campfireModel = gltf.scene;
-    campfireModel.position.set(0, 0, 10); // Place the campfire where the sofa was
-    campfireModel.scale.set(2, 2, 2); // Adjust scale as needed
-    scene.add(campfireModel);
+    const streetLampModel = gltf.scene;
 
-    // Add a flickering point light for the campfire
-    const campfireLight = new THREE.PointLight(0xff6600, 2, 10);
-    campfireLight.position.set(0, 1, 10); // Slightly above the campfire
-    scene.add(campfireLight);
+    // Define positions for street lamps
+    const lampPositions = [
+      { x: -10, z: 10 }, // Left side of spawn
+      { x: 15, z: -15 }, // Northeast area
+      { x: -15, z: -15 }, // Northwest area
+      { x: 20, z: 20 }, // Southeast corner
+      { x: -20, z: 20 }, // Southwest corner
+      { x: 0, z: -20 }, // North center
+      { x: 0, z: 25 }, // South center
+    ];
 
-    // Create a flickering effect for the campfire light
-    function animateCampfire() {
-      // Random intensity between 1.5 and 2.5
-      campfireLight.intensity = 1.5 + Math.random();
-      setTimeout(animateCampfire, 1000 + Math.random() * 150);
-    }
-    animateCampfire();
+    // Add each lamp to the scene
+    lampPositions.forEach((pos) => {
+      const lampInstance = streetLampModel.clone();
+      lampInstance.position.set(pos.x, 0, pos.z);
 
-    // Add collision detection for campfire
-    const campfireBox = new THREE.Box3().setFromObject(campfireModel);
-    campfireBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
-    graveCollisionBoxes.push(campfireBox); // Use same collision system as graves
+      // Adjust scale if needed
+      lampInstance.scale.set(2, 2, 2);
 
-    console.log("Campfire loaded successfully");
+      // Random slight rotation for variety
+      lampInstance.rotation.y = Math.random() * Math.PI * 2;
+
+      scene.add(lampInstance); // Add point light for each lamp
+      const lampLight = new THREE.PointLight(0xffffcc, 1.5, 15);
+      lampLight.position.set(pos.x, 4, pos.z); // Position light at the top of the lamp
+      lampLight.castShadow = true;
+
+      // Configure shadow properties
+      lampLight.shadow.mapSize.width = 512;
+      lampLight.shadow.mapSize.height = 512;
+      lampLight.shadow.camera.near = 0.5;
+      lampLight.shadow.camera.far = 20;
+
+      scene.add(lampLight); // Add dramatic flickering effect for horror atmosphere
+      function animateLampLight() {
+        // Generate random flicker patterns
+        const flickerPattern = Math.random(); // Different flickering patterns for each lamp
+        if (flickerPattern < 1) {
+          // Occasional complete blackout (20% chance)
+          lampLight.intensity = 0;
+          setTimeout(() => {
+            lampLight.intensity = 1.5 + Math.random() * 0.5;
+          }, 800 + Math.random() * 2000); // Extended darkness period 800-2000ms
+        }
+        // else if (flickerPattern < 0.2) {
+        //   // Dimming (20% chance)
+        //   lampLight.intensity = 0; // Complete darkness instead of dim
+        //   setTimeout(() => {
+        //     lampLight.intensity = 1.5;
+        //   }, 600 + Math.random() * 900); // Extended darkness period 600-1500ms
+        // }
+        else {
+          // Subtle pulsing (30% chance)
+          lampLight.intensity = 1.2 + Math.random() * 0.6;
+        }
+
+        // Set timing for next flicker event - all lamps flicker frequently now
+        // Fixed to around 1 second (800-1200ms) as requested
+        const nextFlickerTime = 800 + Math.random() * 400;
+
+        setTimeout(animateLampLight, nextFlickerTime);
+      }
+      animateLampLight();
+
+      // Add collision detection for the lamp
+      const lampBox = new THREE.Box3().setFromObject(lampInstance);
+      lampBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
+      graveCollisionBoxes.push(lampBox); // Use same collision system as graves
+
+      console.log(`Street lamp added at position (${pos.x}, ${pos.z})`);
+    });
+
+    console.log("Street lamps loaded successfully");
   },
   undefined,
   (error) => {
-    console.error("Error loading campfire asset:", error);
-  }
-);
-
-// Tambahkan bangunan hancur
-const bangunanHancurLoader = new GLTFLoader();
-bangunanHancurLoader.load(
-  "./public/bangunan_hancur.glb",
-  (gltf) => {
-    const bangunanHancurModel = gltf.scene;
-    // Posisikan bangunan hancur di sisi berlawanan dari makam
-    bangunanHancurModel.position.set(20, 0, -10);
-    // Sesuaikan ukuran bangunan hancur
-    bangunanHancurModel.scale.set(0.5, 0.5, 0.5);
-    // Rotasi agar tampak lebih alami
-    bangunanHancurModel.rotation.y = Math.PI / 2; // Rotasi 45 derajat
-    scene.add(bangunanHancurModel);
-
-    // Buat bounding box untuk collision detection
-    const bangunanHancurBox = new THREE.Box3().setFromObject(
-      bangunanHancurModel
-    );
-    bangunanHancurBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Tambahkan buffer
-    graveCollisionBoxes.push(bangunanHancurBox); // Gunakan sistem collision yang sama dengan makam
-
-    console.log("Bangunan hancur loaded successfully");
-  },
-  undefined,
-  (error) => {
-    console.error("Error loading bangunan hancur asset:", error);
+    console.error("Error loading street lamp asset:", error);
   }
 );
