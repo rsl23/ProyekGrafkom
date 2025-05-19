@@ -8,21 +8,21 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000033); // Dark blue for night
+scene.background = new THREE.Color(0x000010); // Lebih gelap dari sebelumnya
 
 // Camera
 const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
-  0.1,
+  0.0001,
   1000
 );
 camera.position.set(0, 1.6, 15); // Spawn user dekat dengan api unggun
 
 // Lights
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
-ambientLight.intensity = 0.05; // Almost no ambient light
-ambientLight.color.set(0x404040); // Softer, cooler light
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.01);
+ambientLight.intensity = 0.001; // Hampir tidak ada cahaya ambient
+ambientLight.color.set(0x222233); // Biru gelap
 scene.add(ambientLight);
 
 // Set all main lights to zero so the scene is dark except for flashlight
@@ -913,9 +913,9 @@ generatorLoader.load(
 
 // --- TREE SPAWNING WITH SPACING AND COLLISION ---
 const treeTypes = [
-  { file: "./public/ancient_tree.glb", count: 25, scale: [0.007, 0.007, 0.007] },
+  { file: "./public/ancient_tree.glb", count: 65, scale: [0.007, 0.007, 0.007] },
   // { file: "./public/oak_tree.glb", count: 25, scale: [5, 5, 5] },
-  { file: "./public/tree_1.glb", count: 25, scale: [0.4, 0.5, 0.4] },
+  { file: "./public/tree_1.glb", count: 75, scale: [0.4, 0.5, 0.4] },
 ];
 
 const treeLoader = new GLTFLoader();
@@ -1038,6 +1038,101 @@ treeTypes.forEach((treeType) => {
   );
 });
 // --- END TREE SPAWNING ---
+
+// --- STREET LAMP SPAWNING WITH LIGHT & COLLISION ---
+const streetLampLoader = new GLTFLoader();
+const streetLampCount = 5;
+const streetLampScale = [1.7, 1.7, 1.7];
+const placedLampPositions = [];
+
+function isFarFromOtherLamps(x, z) {
+  for (const pos of placedLampPositions) {
+    const dx = x - pos.x;
+    const dz = z - pos.z;
+    if (Math.sqrt(dx * dx + dz * dz) < 8) return false;
+  }
+  return true;
+}
+
+function getRandomLampPositionSafe() {
+  let x, z, tries = 0;
+  let valid = false;
+  while (!valid && tries < 200) {
+    x = Math.random() * (mapBoundary * 2) - mapBoundary;
+    z = Math.random() * (mapBoundary * 2) - mapBoundary;
+    tries++;
+    valid =
+      isFarFromOtherLamps(x, z) &&
+      isFarFromOtherTrees(x, z) &&
+      isFarFromImportantObjects(x, z);
+  }
+  if (!valid) {
+    x = (Math.random() < 0.5 ? -1 : 1) * (mapBoundary - 3);
+    z = (Math.random() < 0.5 ? -1 : 1) * (mapBoundary - 3);
+  }
+  return { x, y: 0, z };
+}
+
+streetLampLoader.load(
+  './public/standart_street_lamp.glb',
+  (gltf) => {
+    for (let i = 0; i < streetLampCount; i++) {
+      const lamp = gltf.scene.clone();
+      const pos = getRandomLampPositionSafe();
+      lamp.position.set(pos.x, pos.y, pos.z);
+      lamp.scale.set(...streetLampScale);
+      lamp.rotation.y = Math.random() * Math.PI * 2;
+      scene.add(lamp);
+      placedLampPositions.push({ x: pos.x, z: pos.z });
+      // Tambahkan collision box hanya pada tiang lampu (trunk/pole)
+      let lampBox = null;
+      let pole = lamp.getObjectByName('trunk') || lamp.getObjectByName('Trunk') || lamp.getObjectByName('pole') || lamp.getObjectByName('Pole');
+      if (pole) {
+        lampBox = new THREE.Box3().setFromObject(pole);
+      } else {
+        lampBox = new THREE.Box3().setFromObject(lamp);
+        const center = new THREE.Vector3();
+        lampBox.getCenter(center);
+        const size = new THREE.Vector3();
+        lampBox.getSize(size);
+        size.x *= 0.25;
+        size.z *= 0.25;
+        lampBox.min.x = center.x - size.x / 2;
+        lampBox.max.x = center.x + size.x / 2;
+        lampBox.min.z = center.z - size.z / 2;
+        lampBox.max.z = center.z + size.z / 2;
+      }
+      graveCollisionBoxes.push(lampBox);
+      // Tambahkan lampu menyala di atas lampu jalan
+      // Cari node "lamp_head" atau "Lamp_Head" jika ada, jika tidak pakai posisi paling atas
+      let lampHead = lamp.getObjectByName('lamp_head') || lamp.getObjectByName('Lamp_Head');
+      let lampLightPos;
+      if (lampHead) {
+        lampHead.updateWorldMatrix(true, false);
+        lampLightPos = new THREE.Vector3();
+        lampHead.getWorldPosition(lampLightPos);
+      } else {
+        // Ambil bounding box paling atas
+        lampBox.getCenter(lampLightPos = new THREE.Vector3());
+        lampLightPos.y = lampBox.max.y + 0.5;
+      }
+      const lampLight = new THREE.PointLight(0xfff2b0, 2.5, 7, 2);
+      lampLight.position.copy(lampLightPos);
+      lampLight.castShadow = false;
+      scene.add(lampLight);
+      // Tambahkan efek glow (optional):
+      const lampGlow = new THREE.PointLight(0xfff2b0, 0.7, 5);
+      lampGlow.position.copy(lampLightPos);
+      scene.add(lampGlow);
+    }
+    console.log('Street lamps loaded and scattered around the map');
+  },
+  undefined,
+  (error) => {
+    console.error('Error loading street lamp asset:', error);
+  }
+);
+// --- END STREET LAMP SPAWNING ---
 
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
