@@ -435,6 +435,10 @@ scene.add(flashlightBulb);
 // Flashlight toggle state
 let flashlightOn = true;
 
+// Add gasoline counter
+let gasolineCollected = 0;
+const requiredGasoline = 3; // Number of gasoline cans needed to run the generator
+
 // Flashlight dimming variables
 const dimmingDuration = 20; // Durasi dimming (detik)
 const maxIntensity = 3; // Intensitas maksimum
@@ -862,19 +866,14 @@ function checkGeneratorProximity() {
   const playerPos = controls.getObject().position;
   const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
 
-  let minDistance = Infinity;
-  let closestGenerator = null;
-  let isLookingAtGenerator = false;
-
-  // Threshold for dot product to determine if player is looking at generator
-  // Higher value = narrower field of view (more accurate aiming required)
-  const lookingThreshold = 0.85; // Increased from 0.7 for more precise cursor aiming
-
-  generatorObjects.forEach((generator, index) => {
+  // Only check the single remaining generator (index 0)
+  if (generatorObjects.length > 0) {
+    const generator = generatorObjects[0];
+    const index = 0;
     const distance = playerPos.distanceTo(generator.position);
 
     // Increased interaction radius for audio detection
-    const interactionRadius = 20; // Increased to make generators easier to find
+    const interactionRadius = 20; // Increased to make generator easier to find
     const visualInteractionRadius = 5; // Keep visual/interaction radius at 5
 
     // Use the larger radius for audio detection
@@ -890,77 +889,87 @@ function checkGeneratorProximity() {
         const dotProduct = cameraDirection.dot(directionToGenerator);
 
         // Player is looking at generator if dot product exceeds threshold
+        const lookingThreshold = 0.85;
         if (dotProduct > lookingThreshold) {
-          isLookingAtGenerator = true;
-          if (distance < minDistance) {
-            minDistance = distance;
-            closestGenerator = { position: generator.position, index: index };
+          // Handle visual interaction
+          const promptElement = document.getElementById("interactionPrompt");
+          promptElement.style.display = "block"; // Show different prompt based on generator status
+          if (generatorStatus[index]) {
+            promptElement.innerHTML =
+              '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
+          } else {
+            // Check if player has enough gasoline
+            if (gasolineCollected >= requiredGasoline) {
+              promptElement.innerHTML =
+                '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
+            } else {
+              promptElement.innerHTML = `<span style="color: #ff6600;">[E]</span> Need more gasoline: ${gasolineCollected}/${requiredGasoline}`;
+            }
           }
+
+          return { position: generator.position, index: index };
         }
-      }
-      // For audio, we keep track of all generators within the larger audio radius
-      else if (generatorStatus[index] && isAudioSystemReady()) {
-        // For audio-only detection, we don't require the player to be looking at it
-        if (distance < minDistance) {
-          minDistance = distance;
-          // Mark this as an audio-only detection (not for interaction)
-          closestGenerator = {
-            position: generator.position,
-            index: index,
-            audioOnly: true,
-          };
-        }
+      } else if (generatorStatus[index] && isAudioSystemReady()) {
+        // Audio-only detection (player can hear but not interact)
+        return {
+          position: generator.position,
+          index: index,
+          audioOnly: true,
+        };
       }
     }
-  });
+  }
 
   // Always update audio system with player position
   if (isAudioSystemReady()) {
     audioSystem.updateGeneratorSounds(playerPos);
   }
 
-  // Check if we found a generator (for interaction or audio)
-  if (closestGenerator) {
-    // Handle visual interaction if within visual interaction radius and looking at generator
-    if (
-      minDistance <= 5 &&
-      isLookingAtGenerator &&
-      !closestGenerator.audioOnly
-    ) {
-      const promptElement = document.getElementById("interactionPrompt");
-      promptElement.style.display = "block";
-
-      // Show different prompt based on generator status
-      if (generatorStatus[closestGenerator.index]) {
-        promptElement.innerHTML =
-          '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
-      } else {
-        promptElement.innerHTML =
-          '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
-      }
-    } else {
-      // Hide prompt when not looking at any generator
-      document.getElementById("interactionPrompt").style.display = "none";
-    }
-
-    return closestGenerator;
-  } else {
-    // Hide prompt when not looking at any generator
-    document.getElementById("interactionPrompt").style.display = "none";
-    return null;
-  }
+  // Hide prompt when not looking at the generator
+  document.getElementById("interactionPrompt").style.display = "none";
+  return null;
 }
 
 // Event listener untuk tombol E (interaksi)
 document.addEventListener("keydown", (e) => {
   if (e.code === "KeyE") {
+    // First check for generator interaction
     const closestGenerator = checkGeneratorProximity();
-    if (closestGenerator) {
+    if (closestGenerator && !closestGenerator.audioOnly) {
       const index = closestGenerator.index;
       const promptElement = document.getElementById("interactionPrompt");
 
-      // Toggle status generator
+      // Check if player has enough gasoline to activate generator
+      if (!generatorStatus[index] && gasolineCollected < requiredGasoline) {
+        // Not enough gasoline - show warning
+        promptElement.style.transform = "translateX(-50%) scale(1.1)";
+        promptElement.style.border = "2px solid #ff3300";
+        promptElement.style.boxShadow = "0 0 15px rgba(255, 51, 0, 0.6)";
+        promptElement.innerHTML = `<span style="color: #ff3300;">[!]</span> Need more gasoline: ${gasolineCollected}/${requiredGasoline}`;
+
+        // Reset UI after feedback
+        setTimeout(() => {
+          promptElement.style.border = "2px solid #ff6600";
+          promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
+          promptElement.innerHTML =
+            '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
+          promptElement.style.transform = "translateX(-50%) scale(0.95)";
+        }, 2000);
+
+        return; // Stop here - can't activate
+      }
+
+      // Toggle status generator - if activating, consume the gasoline
       const newStatus = !generatorStatus[index];
+
+      // If turning on, consume gasoline
+      if (newStatus && !generatorStatus[index]) {
+        // Play generator startup sound
+        if (isAudioSystemReady()) {
+          audioSystem.playGeneratorStartupSound(index);
+        }
+      }
+
       generatorStatus[index] = newStatus;
 
       // Update status in the audio system
@@ -975,7 +984,7 @@ document.addEventListener("keydown", (e) => {
       }, 100);
 
       if (newStatus) {
-        console.log(`Generator ${index + 1} diaktifkan!`);
+        console.log(`Generator diaktifkan!`);
 
         // Tambahkan visual feedback saat generator aktif
         promptElement.style.border = "2px solid #00ff00";
@@ -993,7 +1002,7 @@ document.addEventListener("keydown", (e) => {
           }
         }, 1000);
       } else {
-        console.log(`Generator ${index + 1} dinonaktifkan!`);
+        console.log(`Generator dinonaktifkan!`);
 
         // Visual feedback for deactivation
         promptElement.style.border = "2px solid #ff0000";
@@ -1011,6 +1020,36 @@ document.addEventListener("keydown", (e) => {
           }
         }, 1000);
       }
+      return; // Stop here if interacting with generator
+    } // Check for gasoline interaction if not interacting with generator
+    const nearbyGasoline = checkGasolineProximity();
+    if (nearbyGasoline) {
+      const promptElement = document.getElementById("interactionPrompt");
+
+      // Visual feedback for gasoline pickup
+      promptElement.style.transform = "translateX(-50%) scale(1.1)";
+      promptElement.style.border = "2px solid #00ff00";
+      promptElement.style.boxShadow = "0 0 15px rgba(0, 255, 0, 0.6)";
+      promptElement.innerHTML =
+        '<span style="color: #00ff00;">[E]</span> Gasoline Diambil!';
+
+      // Remove the gasoline from the scene
+      scene.remove(nearbyGasoline.object);
+
+      // Increment gasoline counter
+      gasolineCollected++;
+      console.log(
+        `Gasoline ${nearbyGasoline.id} diambil! Total: ${gasolineCollected}/${requiredGasoline}`
+      );
+
+      // Update gasoline counter UI
+      updateGasolineUI();
+
+      // Hide prompt after a short delay
+      setTimeout(() => {
+        promptElement.style.display = "none";
+        promptElement.style.transform = "translateX(-50%) scale(0.95)";
+      }, 1000);
     }
   }
 });
@@ -1094,6 +1133,67 @@ batteryIndicator.appendChild(batteryLabel);
 
 document.body.appendChild(batteryIndicator);
 
+// Create gasoline indicator UI
+const gasolineIndicator = document.createElement("div");
+gasolineIndicator.id = "gasolineIndicator";
+gasolineIndicator.style.position = "absolute";
+gasolineIndicator.style.top = "20px";
+gasolineIndicator.style.right = "20px";
+gasolineIndicator.style.width = "150px";
+gasolineIndicator.style.height = "40px";
+gasolineIndicator.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+gasolineIndicator.style.borderRadius = "5px";
+gasolineIndicator.style.padding = "10px";
+gasolineIndicator.style.display = "flex";
+gasolineIndicator.style.alignItems = "center";
+gasolineIndicator.style.justifyContent = "center";
+gasolineIndicator.style.gap = "10px";
+gasolineIndicator.style.zIndex = "1000";
+gasolineIndicator.style.border = "2px solid #ffcc00";
+gasolineIndicator.style.boxShadow = "0 0 10px rgba(255, 204, 0, 0.4)";
+
+// Create gasoline icon
+const gasolineIcon = document.createElement("div");
+gasolineIcon.style.width = "20px";
+gasolineIcon.style.height = "20px";
+gasolineIcon.style.backgroundImage =
+  'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ffcc00"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>\')';
+gasolineIcon.style.backgroundSize = "contain";
+gasolineIcon.style.backgroundRepeat = "no-repeat";
+gasolineIndicator.appendChild(gasolineIcon);
+
+// Create gasoline count text
+const gasolineCountText = document.createElement("div");
+gasolineCountText.id = "gasolineCount";
+gasolineCountText.style.color = "#ffcc00";
+gasolineCountText.style.fontFamily = "Arial, sans-serif";
+gasolineCountText.style.fontSize = "18px";
+gasolineCountText.style.fontWeight = "bold";
+gasolineCountText.style.textShadow = "0 0 3px rgba(0, 0, 0, 0.8)";
+gasolineCountText.innerHTML = `0/${requiredGasoline}`;
+gasolineIndicator.appendChild(gasolineCountText);
+
+document.body.appendChild(gasolineIndicator);
+
+// Function to update gasoline UI
+function updateGasolineUI() {
+  const gasolineCountElement = document.getElementById("gasolineCount");
+  if (gasolineCountElement) {
+    gasolineCountElement.innerHTML = `${gasolineCollected}/${requiredGasoline}`;
+
+    // Change color based on how much collected
+    if (gasolineCollected >= requiredGasoline) {
+      gasolineCountElement.style.color = "#00ff00"; // Green when enough
+      gasolineIndicator.style.border = "2px solid #00ff00";
+      gasolineIndicator.style.boxShadow = "0 0 10px rgba(0, 255, 0, 0.4)";
+    } else {
+      gasolineCountElement.style.color = "#ffcc00"; // Yellow when collecting
+      gasolineIndicator.style.border = "2px solid #ffcc00";
+      gasolineIndicator.style.boxShadow = "0 0 10px rgba(255, 204, 0, 0.4)";
+    }
+  }
+}
+
 // Function to update battery UI
 function updateBatteryUI(level) {
   const batteryLevel = document.getElementById("batteryLevel");
@@ -1148,66 +1248,156 @@ function updateBatteryUI(level) {
   }
 }
 
-// Load 5 generators with random positions
+// Load 1 generator and 5 gasoline with positions
 const generatorLoader = new GLTFLoader();
+const gasolineLoader = new GLTFLoader();
+
+// First load the generator
 generatorLoader.load(
   "./public/generator.glb",
   (gltf) => {
     const generatorModel = gltf.scene;
 
-    // Create 5 generators at strategic positions across the map
-    // Increased distances to utilize our improved audio system
-    const generatorPositions = [
-      { x: 5, y: 0.5, z: -10 }, // First generator
-      { x: 22, y: 0.5, z: -20 }, // Northeast generator
-      { x: -14, y: 0.5, z: -25 }, // Northwest generator
-      { x: 15, y: 0.5, z: 25 }, // Southeast generator
-      { x: -20, y: 0.5, z: 25 }, // Southwest generator
+    // Only one generator at a strategic position
+    const generatorPosition = { x: 5, y: 0.5, z: -10 }; // Keep only the first generator
+
+    // Add slight randomization to position
+    const randomOffset = Math.random() * 3 - 1.5; // Between -1.5 and 1.5
+    generatorPosition.x += randomOffset;
+    generatorPosition.z += randomOffset;
+
+    // Position the generator and add to scene
+    const generatorInstance = generatorModel.clone();
+    generatorInstance.position.set(
+      generatorPosition.x,
+      generatorPosition.y,
+      generatorPosition.z
+    );
+    generatorInstance.scale.set(0.01, 0.01, 0.01);
+    generatorInstance.userData.generatorId = "generator-0";
+
+    scene.add(generatorInstance);
+
+    // Store reference for interaction
+    generatorObjects.push(generatorInstance);
+    generatorStatus[0] = false; // Set status awal ke nonaktif
+
+    // Attach audio to this generator
+    if (isAudioSystemReady()) {
+      audioSystem.attachSoundToGenerator(generatorInstance, 0, audioListener);
+    }
+
+    // Add collision detection for generator
+    const generatorBox = new THREE.Box3().setFromObject(generatorInstance);
+    generatorBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
+    graveCollisionBoxes.push(generatorBox); // Use same collision system as graves
+
+    console.log(
+      "Generator loaded successfully at position:",
+      generatorInstance.position
+    );
+  },
+  undefined,
+  (error) => {
+    console.error("Error loading generator asset:", error);
+  }
+);
+
+// Then load gasoline cans
+gasolineLoader.load(
+  "./public/gasoline.glb",
+  (gltf) => {
+    const gasolineModel = gltf.scene;
+
+    // Create 4 gasoline at fixed positions (replacing previous generators)
+    const gasolinePositions = [
+      { x: 22, y: 0, z: -20 }, // Northeast gasoline
+      { x: -14, y: 0, z: -25 }, // Northwest gasoline
+      { x: 15, y: 0, z: 25 }, // Southeast gasoline
+      { x: -20, y: 0, z: 25 }, // Southwest gasoline
     ];
 
-    // Create and add each generator
-    generatorPositions.forEach((pos, index) => {
-      const generatorInstance = generatorModel.clone();
+    // Create and add each fixed gasoline
+    gasolinePositions.forEach((pos, index) => {
+      const gasolineInstance = gasolineModel.clone();
 
       // Add slight randomization to positions
       const randomOffset = Math.random() * 3 - 1.5; // Between -1.5 and 1.5
       pos.x += randomOffset;
       pos.z += randomOffset;
 
-      // Position the generator and add to scene
-      generatorInstance.position.set(pos.x, pos.y, pos.z);
-      generatorInstance.scale.set(0.01, 0.01, 0.01); // Create a unique ID for this generator
-      generatorInstance.userData.generatorId = `generator-${index}`;
+      // Position the gasoline and add to scene
+      gasolineInstance.position.set(pos.x, pos.y, pos.z);
+      gasolineInstance.scale.set(2, 2, 2); // Adjust scale to look appropriate
+      gasolineInstance.rotation.y = Math.random() * Math.PI * 2; // Random rotation for variety
+      gasolineInstance.userData.gasolineId = `gasoline-fixed-${index}`;
 
-      scene.add(generatorInstance);
+      scene.add(gasolineInstance);
 
-      // Store reference for interaction
-      generatorObjects.push(generatorInstance);
-      generatorStatus[index] = false; // Set status awal ke nonaktif
-
-      // Attach audio to this generator
-      if (isAudioSystemReady()) {
-        audioSystem.attachSoundToGenerator(
-          generatorInstance,
-          index,
-          audioListener
-        );
-      }
-
-      // Add collision detection for generator
-      const generatorBox = new THREE.Box3().setFromObject(generatorInstance);
-      generatorBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
-      graveCollisionBoxes.push(generatorBox); // Use same collision system as graves
+      // Add collision detection for gasoline
+      const gasolineBox = new THREE.Box3().setFromObject(gasolineInstance);
+      gasolineBox.expandByVector(new THREE.Vector3(0.5, 0.5, 0.5)); // Add buffer
+      graveCollisionBoxes.push(gasolineBox); // Use same collision system as graves
 
       console.log(
-        `Generator ${index + 1} loaded successfully at position:`,
-        generatorInstance.position
+        `Fixed Gasoline ${index + 1} placed at position:`,
+        gasolineInstance.position
       );
     });
+
+    // Create a fifth gasoline in a completely random position across the map
+    let randomPosX, randomPosZ;
+    let validPosition = false;
+    let attempts = 0;
+    const maxAttempts = 50;
+
+    // Keep trying until we find a valid position or reach max attempts
+    while (!validPosition && attempts < maxAttempts) {
+      // Generate random position across the entire map
+      randomPosX = (Math.random() * 2 - 1) * (mapBoundary - 5);
+      randomPosZ = (Math.random() * 2 - 1) * (mapBoundary - 5);
+
+      // Make sure it's not too close to existing objects
+      let tooClose = false;
+
+      // Check distance from generators
+      generatorObjects.forEach((generator) => {
+        const distance = Math.sqrt(
+          Math.pow(randomPosX - generator.position.x, 2) +
+            Math.pow(randomPosZ - generator.position.z, 2)
+        );
+        if (distance < 10) tooClose = true; // Keep at least 10 units away
+      });
+
+      // Check distance from spawn point
+      const spawnDistance = Math.sqrt(
+        Math.pow(randomPosX - 0, 2) + Math.pow(randomPosZ - 15, 2)
+      );
+      if (spawnDistance < 15) tooClose = true; // Keep away from spawn
+
+      if (!tooClose) validPosition = true;
+      attempts++;
+    }
+
+    // Create the random gasoline
+    const randomGasoline = gasolineModel.clone();
+    randomGasoline.position.set(randomPosX, 0.2, randomPosZ);
+    randomGasoline.scale.set(1, 1, 1);
+    randomGasoline.rotation.y = Math.random() * Math.PI * 2;
+    randomGasoline.userData.gasolineId = "gasoline-random";
+
+    scene.add(randomGasoline);
+
+    // Add collision detection
+    const randomGasolineBox = new THREE.Box3().setFromObject(randomGasoline);
+    randomGasolineBox.expandByVector(new THREE.Vector3(0.5, 0.5, 0.5));
+    graveCollisionBoxes.push(randomGasolineBox);
+
+    console.log("Random Gasoline placed at position:", randomGasoline.position);
   },
   undefined,
   (error) => {
-    console.error("Error loading generator assets:", error);
+    console.error("Error loading gasoline assets:", error);
   }
 );
 
@@ -1345,12 +1535,64 @@ treeTypes.forEach((treeType) => {
 });
 // --- END TREE SPAWNING ---
 
+// Array for tracking gasoline objects
+const gasolineObjects = [];
+
+// Function to check if player is near a gasoline can
+function checkGasolineProximity() {
+  if (!controls.isLocked) return null;
+
+  const playerPos = controls.getObject().position;
+  const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
+  const lookingThreshold = 0.85; // Same threshold as generator
+
+  // Find all objects with gasolineId in their userData
+  const gasolineCans = [];
+  scene.traverse((object) => {
+    if (object.userData && object.userData.gasolineId) {
+      gasolineCans.push(object);
+    }
+  });
+
+  // Check if player is looking at any gasoline can
+  for (const gasoline of gasolineCans) {
+    const distance = playerPos.distanceTo(gasoline.position);
+
+    // Only check if within interaction distance
+    if (distance <= 5) {
+      // Calculate direction to gasoline
+      const directionToGasoline = new THREE.Vector3()
+        .subVectors(gasoline.position, playerPos)
+        .normalize();
+
+      // Check if player is looking at gasoline
+      const dotProduct = cameraDirection.dot(directionToGasoline);
+
+      if (dotProduct > lookingThreshold) {
+        // Show pickup prompt
+        const promptElement = document.getElementById("interactionPrompt");
+        promptElement.style.display = "block";
+        promptElement.innerHTML =
+          '<span style="color: #ffcc00;">[E]</span> Ambil Gasoline';
+        promptElement.style.border = "2px solid #ffcc00";
+        promptElement.style.boxShadow = "0 0 15px rgba(255, 204, 0, 0.6)";
+
+        return {
+          object: gasoline,
+          id: gasoline.userData.gasolineId,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   const speed = 5 * delta;
-
   if (controls.isLocked) {
     const previousPos = controls.getObject().position.clone();
 
@@ -1362,15 +1604,24 @@ function animate() {
     handleJump(delta);
     handleStairsCollision();
     handleFenceCollision();
-    handleGraveCollision(previousPos); // Check generator proximity for interaction and update cursor
-    const closestGenerator = checkGeneratorProximity();
+    handleGraveCollision(previousPos);
 
-    // Update cursor dot color based on whether player is looking at a generator
+    // Check for interactive objects
+    const closestGenerator = checkGeneratorProximity();
+    const nearbyGasoline = checkGasolineProximity();
+
+    // Update cursor dot color based on whether player is looking at an interactive object
     const cursorDot = document.getElementById("cursorDot");
-    if (closestGenerator) {
-      // Change cursor color when looking at interactive object
+    if (closestGenerator && !closestGenerator.audioOnly) {
+      // Generator interaction - orange
       cursorDot.style.backgroundColor = "#ff6600";
       cursorDot.style.boxShadow = "0 0 5px rgba(255, 102, 0, 0.8)";
+      cursorDot.style.width = "8px";
+      cursorDot.style.height = "8px";
+    } else if (nearbyGasoline) {
+      // Gasoline interaction - yellow
+      cursorDot.style.backgroundColor = "#ffcc00";
+      cursorDot.style.boxShadow = "0 0 5px rgba(255, 204, 0, 0.8)";
       cursorDot.style.width = "8px";
       cursorDot.style.height = "8px";
     } else {

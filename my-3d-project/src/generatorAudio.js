@@ -13,6 +13,10 @@ let generatorStatus = {};
 let isAudioLoaded = false;
 let audioBuffer = null;
 
+// Add a startup sound effect for generator
+let startupSoundBuffer = null;
+let isStartupSoundLoaded = false;
+
 /**
  * Initialize the audio system with an audio listener
  * @param {THREE.AudioListener} audioListener - The audio listener attached to the camera
@@ -27,7 +31,16 @@ export function initAudioSystem(audioListener) {
     "../public/suara_generator.mp3",
   ];
 
+  // Try to load the startup sound
+  const startupPaths = [
+    "./public/generator_startup.mp3",
+    "/public/generator_startup.mp3",
+    "generator_startup.mp3",
+    "./generator_startup.mp3",
+  ];
+
   tryLoadAudio(possiblePaths, audioListener);
+  tryLoadStartupSound(startupPaths, audioListener);
 
   // Set up fallback if audio fails to load after 5 seconds
   setTimeout(() => {
@@ -39,12 +52,19 @@ export function initAudioSystem(audioListener) {
       isAudioLoaded = true;
       console.log("Fallback sound created and ready to use");
     }
+
+    if (!isStartupSoundLoaded) {
+      console.warn("Startup sound failed to load, creating fallback");
+      startupSoundBuffer = createStartupFallbackSound();
+      isStartupSoundLoaded = true;
+    }
   }, 5000);
 
   return {
     attachSoundToGenerator,
     updateGeneratorSounds,
     setGeneratorStatus,
+    playGeneratorStartupSound,
     getAudioLoadStatus: () => isAudioLoaded,
   };
 }
@@ -102,6 +122,55 @@ function tryLoadAudio(paths, audioListener) {
 }
 
 /**
+ * Try loading startup sound from multiple possible paths
+ */
+function tryLoadStartupSound(paths, audioListener) {
+  if (paths.length === 0) {
+    console.error("All startup sound paths failed, will use fallback");
+    startupSoundBuffer = createStartupFallbackSound();
+    isStartupSoundLoaded = true;
+    return;
+  }
+
+  const currentPath = paths[0];
+  const remainingPaths = paths.slice(1);
+
+  console.log(`Trying to load startup sound from: ${currentPath}`);
+  const audioLoader = new THREE.AudioLoader();
+
+  audioLoader.load(
+    currentPath,
+    function (buffer) {
+      startupSoundBuffer = buffer;
+      isStartupSoundLoaded = true;
+      console.log(`Generator startup sound loaded from: ${currentPath}`);
+    },
+    function (xhr) {
+      if (xhr.loaded > 0) {
+        console.log(
+          `Startup sound loading from ${currentPath}: ${
+            (xhr.loaded / xhr.total) * 100
+          }%`
+        );
+      }
+    },
+    function (error) {
+      console.error(`Error loading startup sound from ${currentPath}:`, error);
+
+      // Try next path if available
+      if (remainingPaths.length > 0) {
+        console.log("Trying next startup sound path...");
+        tryLoadStartupSound(remainingPaths, audioListener);
+      } else {
+        // If all paths fail, use fallback sound
+        startupSoundBuffer = createStartupFallbackSound();
+        isStartupSoundLoaded = true;
+      }
+    }
+  );
+}
+
+/**
  * Create a fallback procedural sound if audio file loading fails
  */
 function createFallbackSound() {
@@ -130,6 +199,47 @@ function createFallbackSound() {
 }
 
 /**
+ * Create a fallback startup sound
+ */
+function createStartupFallbackSound() {
+  const audioContext = THREE.AudioContext.getContext();
+  const bufferSize = audioContext.sampleRate * 2; // 2 second buffer
+  const buffer = audioContext.createBuffer(
+    1,
+    bufferSize,
+    audioContext.sampleRate
+  );
+  const channelData = buffer.getChannelData(0);
+
+  // Generate a startup sound effect (increasing pitch plus mechanical sounds)
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / audioContext.sampleRate;
+
+    // Startup whine - increasing frequency over time
+    const whineFreq = 100 + t * 300; // 100 to 400 Hz
+    const whine = Math.sin(2 * Math.PI * whineFreq * t) * 0.3;
+
+    // Mechanical clicking
+    const click = Math.random() > 0.995 ? Math.random() * 0.8 : 0;
+
+    // Engine rumble
+    const rumble = Math.random() * 0.1 * Math.min(1.0, t * 2); // increase over time
+
+    // Combine sounds with envelope
+    let envelope = 0;
+    if (t < 0.1) envelope = t * 10; // quick fade-in
+    else if (t > 1.8) envelope = (2.0 - t) * 5; // fade-out at end
+    else envelope = 1.0;
+
+    // Combine all elements
+    channelData[i] = (whine + click + rumble) * envelope * 0.7;
+  }
+
+  console.log("Created fallback generator startup sound");
+  return buffer;
+}
+
+/**
  * Attach a positional audio source to a generator object
  * @param {THREE.Object3D} generator - The generator object
  * @param {number} index - The index of the generator
@@ -154,6 +264,46 @@ function attachSoundToGenerator(generator, index, audioListener) {
 
   console.log(`Attached sound to generator ${index}`);
   return true;
+}
+
+/**
+ * Play the generator startup sound effect
+ * @param {number} index - The generator index
+ */
+function playGeneratorStartupSound(index) {
+  if (!isStartupSoundLoaded || !startupSoundBuffer) {
+    console.warn("Startup sound not loaded yet");
+    return;
+  }
+
+  // If we have a sound for this generator, attach startup sound to its position
+  if (generatorSounds[index] && generatorSounds[index].parent) {
+    const generator = generatorSounds[index].parent;
+    const audioListener = generatorSounds[index].listener;
+
+    // Create new non-looping sound for the startup effect
+    const startupSound = new THREE.PositionalAudio(audioListener);
+    startupSound.setBuffer(startupSoundBuffer);
+    startupSound.setLoop(false);
+    startupSound.setVolume(1.0);
+    startupSound.setRefDistance(1);
+    startupSound.setDistanceModel("exponential");
+    startupSound.setRolloffFactor(0.8);
+    startupSound.setMaxDistance(30); // Can hear startup from further away
+
+    // Add to generator
+    generator.add(startupSound);
+    startupSound.play();
+
+    // Remove the sound object after it's done playing
+    setTimeout(() => {
+      if (generator) {
+        generator.remove(startupSound);
+      }
+    }, startupSoundBuffer.duration * 1000 + 100);
+
+    console.log(`Playing startup sound for generator ${index}`);
+  }
 }
 
 /**
