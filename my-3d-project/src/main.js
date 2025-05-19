@@ -1157,6 +1157,28 @@ streetLampLoader.load(
 );
 // --- END STREET LAMP SPAWNING ---
 
+// Tambahkan spooky_bear.glb di area kosong map (pojok barat daya, scale kecil)
+const spookyBearLoader = new GLTFLoader();
+spookyBearLoader.load(
+  './public/spooky_bear.glb',
+  (gltf) => {
+    const bear = gltf.scene;
+    // Posisi tetap di area kosong, misal (-27, 0, 27)
+    bear.position.set(-27, 0, 27);
+    bear.scale.set(0.001, 0.0018, 0.0018); // Kecil
+    bear.rotation.y = Math.PI / 4; // Sedikit miring biar natural
+    scene.add(bear);
+    // Tambahkan collision box untuk bear
+    const bearBox = new THREE.Box3().setFromObject(bear);
+    graveCollisionBoxes.push(bearBox);
+    console.log('Spooky bear loaded at (-27, 0, 27)');
+  },
+  undefined,
+  (error) => {
+    console.error('Error loading spooky_bear asset:', error);
+  }
+);
+
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
   requestAnimationFrame(animate);
