@@ -650,6 +650,21 @@ setTimeout(() => {
   }
 }, 5000); // Tunggu 5 detik
 
+// --- AUDIO GENERATOR: pastikan tidak double play dan context selalu aktif ---
+let generatorSoundInitialized = false;
+document.addEventListener("click", () => {
+  if (!generatorSoundInitialized && isAudioLoaded) {
+    try {
+      if (!generatorSound.isPlaying) generatorSound.play();
+      generatorSound.setVolume(0); // Mulai dengan volume 0
+      generatorSoundInitialized = true;
+      console.log("Generator sound context initialized after user click");
+    } catch (e) {
+      console.warn("Failed to play generator sound on user click:", e);
+    }
+  }
+});
+
 // Fungsi untuk mengecek jarak ke generator terdekat
 function checkGeneratorProximity() {
   if (!controls.isLocked) return;
@@ -912,9 +927,144 @@ generatorLoader.load(
   }
 );
 
-// Add brick and stone walls to the scene using the modular wall system
-// This uses a comprehensive array of wall positions stored in the walls.js module
-addBrickWalls(scene, graveCollisionBoxes);
+// --- TREE SPAWNING WITH SPACING AND COLLISION ---
+const treeTypes = [
+  {
+    file: "./public/ancient_tree.glb",
+    count: 25,
+    scale: [0.007, 0.007, 0.007],
+  },
+  // { file: "./public/oak_tree.glb", count: 25, scale: [5, 5, 5] },
+  { file: "./public/tree_1.glb", count: 25, scale: [0.4, 0.5, 0.4] },
+];
+
+const treeLoader = new GLTFLoader();
+const treeAreaMargin = 4; // Hindari area tengah dan objek penting
+const minTreeDistance = 6; // Minimal jarak antar pohon
+
+// Kumpulkan posisi objek penting (generator, campfire, bangunan, grave, bangunan hancur)
+const importantBoxes = [];
+// Generator
+function addImportantBoxFromObject(obj) {
+  if (!obj) return;
+  const box = new THREE.Box3().setFromObject(obj);
+  importantBoxes.push(box);
+}
+generatorObjects.forEach(addImportantBoxFromObject);
+// Campfire
+let campfireBox = null;
+if (typeof campfireModel !== "undefined") {
+  campfireBox = new THREE.Box3().setFromObject(campfireModel);
+  importantBoxes.push(campfireBox);
+}
+// Bangunan hancur
+let bangunanHancurBox = null;
+if (typeof bangunanHancurModel !== "undefined") {
+  bangunanHancurBox = new THREE.Box3().setFromObject(bangunanHancurModel);
+  importantBoxes.push(bangunanHancurBox);
+}
+// Graveyard
+for (const box of graveCollisionBoxes) {
+  importantBoxes.push(box.clone());
+}
+
+// Simpan posisi tree yang sudah ditempatkan
+const placedTreePositions = [];
+
+function isFarFromOtherTrees(x, z) {
+  for (const pos of placedTreePositions) {
+    const dx = x - pos.x;
+    const dz = z - pos.z;
+    if (Math.sqrt(dx * dx + dz * dz) < minTreeDistance) return false;
+  }
+  return true;
+}
+
+function isFarFromImportantObjects(x, z) {
+  const testPoint = new THREE.Vector3(x, 0, z);
+  for (const box of importantBoxes) {
+    if (box.containsPoint(testPoint)) return false;
+    // Buffer: jika terlalu dekat dengan bounding box
+    const expandBox = box.clone().expandByScalar(2.5);
+    if (expandBox.containsPoint(testPoint)) return false;
+  }
+  return true;
+}
+
+function getRandomTreePositionSafe() {
+  let x,
+    z,
+    tries = 0;
+  const playerSpawn = { x: 0, z: 15, radius: 5 };
+  let valid = false;
+  while (!valid && tries < 200) {
+    x = Math.random() * (mapBoundary * 2) - mapBoundary;
+    z = Math.random() * (mapBoundary * 2) - mapBoundary;
+    tries++;
+    const distToSpawn = Math.sqrt(
+      (x - playerSpawn.x) ** 2 + (z - playerSpawn.z) ** 2
+    );
+    valid =
+      (Math.abs(x) >= treeAreaMargin || Math.abs(z) >= treeAreaMargin) &&
+      (x <= -10 || x >= 10 || z <= 5 || z >= 15) &&
+      isFarFromOtherTrees(x, z) &&
+      isFarFromImportantObjects(x, z) &&
+      distToSpawn >= playerSpawn.radius;
+  }
+  // Jika gagal dapat posisi valid setelah 200 kali, spawn saja di posisi random di pinggir map
+  if (!valid) {
+    x = (Math.random() < 0.5 ? -1 : 1) * (mapBoundary - 2);
+    z = (Math.random() < 0.5 ? -1 : 1) * (mapBoundary - 2);
+  }
+  return { x, y: 0, z };
+}
+
+treeTypes.forEach((treeType) => {
+  treeLoader.load(
+    treeType.file,
+    (gltf) => {
+      for (let i = 0; i < treeType.count; i++) {
+        const tree = gltf.scene.clone();
+        const pos = getRandomTreePositionSafe();
+        tree.position.set(pos.x, pos.y, pos.z);
+        tree.scale.set(...treeType.scale);
+        tree.rotation.y = Math.random() * Math.PI * 2;
+        scene.add(tree);
+        placedTreePositions.push({ x: pos.x, z: pos.z });
+        // Tambahkan collision box hanya pada batang (trunk) jika ada
+        let treeBox = null;
+        let trunk =
+          tree.getObjectByName("trunk") ||
+          tree.getObjectByName("Trunk") ||
+          tree.getObjectByName("batang");
+        if (trunk) {
+          treeBox = new THREE.Box3().setFromObject(trunk);
+        } else {
+          // Jika tidak ada trunk, gunakan bounding box model tapi diperkecil pada X dan Z
+          treeBox = new THREE.Box3().setFromObject(tree);
+          const center = new THREE.Vector3();
+          treeBox.getCenter(center);
+          const size = new THREE.Vector3();
+          treeBox.getSize(size);
+          // Perkecil X dan Z (hanya batang)
+          size.x *= 0.3;
+          size.z *= 0.3;
+          treeBox.min.x = center.x - size.x / 2;
+          treeBox.max.x = center.x + size.x / 2;
+          treeBox.min.z = center.z - size.z / 2;
+          treeBox.max.z = center.z + size.z / 2;
+        }
+        graveCollisionBoxes.push(treeBox);
+      }
+      console.log(`${treeType.file} loaded and scattered as forest`);
+    },
+    undefined,
+    (error) => {
+      console.error(`Error loading tree asset ${treeType.file}:`, error);
+    }
+  );
+});
+// --- END TREE SPAWNING ---
 
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
