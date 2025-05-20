@@ -22,7 +22,7 @@ camera.position.set(0, 1.6, 15); // Spawn user dekat dengan api unggun
 
 // Lights
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
-ambientLight.intensity = 0.05; // Almost no ambient light
+ambientLight.intensity = 0.1; // Almost no ambient light
 ambientLight.color.set(0x404040); // Softer, cooler light
 scene.add(ambientLight);
 
@@ -111,10 +111,8 @@ const fenceLoader = new GLTFLoader();
 fenceLoader.load(
   "./public/brick_and_stone_wall.glb",
   (gltf) => {
-    const fenceModel = gltf.scene;
-
-    // North side
-    for (let i = 0; i < segmentCount; i = i + 2) {
+    const fenceModel = gltf.scene; // North side
+    for (let i = 0; i <= segmentCount + 2; i = i + 2) {
       const x = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -122,7 +120,8 @@ fenceLoader.load(
         adjustedFenceHeight,
         fenceModelScale
       );
-      segment.position.set(x, adjustedFenceHeight / 2, -mapBoundary - 1);
+      segment.rotation.y = Math.PI; // Rotate 180 degrees
+      segment.position.set(x, adjustedFenceHeight / 2, -mapBoundary + 1); // Updated z by +1
       scene.add(segment);
     }
     // Add half-size fence at the end of North side
@@ -132,15 +131,16 @@ fenceLoader.load(
       adjustedFenceHeight,
       fenceModelScale
     );
+    northHalfSegment.rotation.y = Math.PI; // Rotate 180 degrees
     northHalfSegment.position.set(
       mapBoundary,
       adjustedFenceHeight / 2,
-      -mapBoundary - 1
+      -mapBoundary + 1 // Updated z by +1
     );
     scene.add(northHalfSegment);
 
     // South side
-    for (let i = -2; i < segmentCount; i = i + 2) {
+    for (let i = -4; i < segmentCount; i = i + 2) {
       const x = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -164,9 +164,8 @@ fenceLoader.load(
       segment.rotation.y = Math.PI / 2;
       segment.position.set(mapBoundary, adjustedFenceHeight / 2, z);
       scene.add(segment);
-    }
-    // West side
-    for (let i = 0; i <= segmentCount + 2; i = i + 2) {
+    } // West side
+    for (let i = -2; i <= segmentCount + 2; i = i + 2) {
       const z = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -174,8 +173,8 @@ fenceLoader.load(
         adjustedFenceHeight,
         fenceModelScale
       );
-      segment.rotation.y = Math.PI / 2;
-      segment.position.set(-mapBoundary, adjustedFenceHeight / 2, z);
+      segment.rotation.y = Math.PI * 1.5; // Rotate 180 degrees (Math.PI/2 + Math.PI)
+      segment.position.set(-mapBoundary - 1, adjustedFenceHeight / 2, z); // Moved west wall by -1 on x-axis
       scene.add(segment);
     }
   },
@@ -278,21 +277,20 @@ function handleGraveCollision(previousPos) {
 function handleFenceCollision() {
   const playerPos = controls.getObject().position;
   const margin = 0.5; // reduced margin to allow player to get closer to walls
-
   // Only restrict movement if the player is within the map boundaries
   if (
-    playerPos.x >= -mapBoundary - margin &&
+    playerPos.x >= -mapBoundary - 1 - margin && // Adjusted for west wall moved by -1
     playerPos.x <= mapBoundary + margin &&
-    playerPos.z >= -mapBoundary - margin &&
+    playerPos.z >= -mapBoundary + 1 - margin && // Adjusted for north wall moved by +1
     playerPos.z <= mapBoundary + margin
   ) {
     playerPos.x = Math.max(
       Math.min(playerPos.x, mapBoundary - margin),
-      -mapBoundary + margin
+      -mapBoundary - 1 + margin // Adjusted for west wall moved by -1
     );
     playerPos.z = Math.max(
       Math.min(playerPos.z, mapBoundary - margin),
-      -mapBoundary + margin
+      -mapBoundary + 1 + margin // Adjusted for north wall moved by +1
     );
   }
 }
@@ -437,7 +435,11 @@ let flashlightOn = true;
 
 // Add gasoline counter
 let gasolineCollected = 0;
-const requiredGasoline = 3; // Number of gasoline cans needed to run the generator
+const requiredGasoline = 5; // Number of gasoline cans needed to run the generator
+// Track if generator has been filled with gasoline
+let generatorFilled = false;
+// Track how many gasoline units have been added to the generator
+let generatorFilledAmount = 0;
 
 // Flashlight dimming variables
 const dimmingDuration = 20; // Durasi dimming (detik)
@@ -654,7 +656,7 @@ creepyAudioLoader.load(
   function (buffer) {
     creepySound.setBuffer(buffer);
     creepySound.setLoop(false); // Only play once when triggered
-    creepySound.setVolume(0.5); // Set volume level (0.0 to 1.0)
+    creepySound.setVolume(initialCreepySoundVolume); // Start with very low volume
     isCreepySoundLoaded = true;
     console.log("Creepy sound effect loaded successfully");
 
@@ -671,19 +673,44 @@ creepyAudioLoader.load(
   }
 );
 
-// Function to play creepy sound at random intervals
+// Track the number of times creepy sound has played for volume progression
+let creepySoundPlayCount = 0;
+const maxCreepySoundVolume = 0.7; // Maximum volume creepy sound will reach
+const creepySoundVolumeStep = 0.1; // Amount to increase volume each time
+const initialCreepySoundVolume = 0.1; // Starting volume (very quiet)
+
+// Function to play creepy sound at random intervals with gradually increasing volume
 function playRandomCreepySound() {
   if (isCreepySoundLoaded && !creepySound.isPlaying) {
+    // Calculate current volume based on play count (increases each time)
+    const currentVolume = Math.min(
+      initialCreepySoundVolume + creepySoundPlayCount * creepySoundVolumeStep,
+      maxCreepySoundVolume
+    );
+
+    // Set the new volume
+    creepySound.setVolume(currentVolume);
+
+    // Play the sound
     creepySound.play();
-    console.log("Playing random creepy sound effect");
+
+    // Increment the play counter for next time
+    creepySoundPlayCount++;
+
+    console.log(
+      `Playing creepy sound effect (volume: ${currentVolume.toFixed(2)})`
+    );
   }
-  // Schedule next creepy sound
+
+  // Schedule next creepy sound with timing that gets shorter as game progresses
   setTimeout(playRandomCreepySound, getRandomInterval());
 }
 
-// Get random interval between 30 and 50 seconds
+// Get random interval that decreases slightly each time (from 30-50s to 20-40s)
 function getRandomInterval() {
-  return Math.random() * 15000 + 30000;
+  // Base interval gets shorter as play count increases (min 20 seconds)
+  const baseTime = Math.max(30000 - creepySoundPlayCount * 1000, 20000);
+  return Math.random() * 15000 + baseTime;
 }
 
 // Initialize the audio system
@@ -886,9 +913,7 @@ function checkGeneratorProximity() {
           .normalize();
 
         // Calculate cosine of angle between camera direction and direction to generator
-        const dotProduct = cameraDirection.dot(directionToGenerator);
-
-        // Player is looking at generator if dot product exceeds threshold
+        const dotProduct = cameraDirection.dot(directionToGenerator); // Player is looking at generator if dot product exceeds threshold
         const lookingThreshold = 0.85;
         if (dotProduct > lookingThreshold) {
           // Handle visual interaction
@@ -897,14 +922,17 @@ function checkGeneratorProximity() {
           if (generatorStatus[index]) {
             promptElement.innerHTML =
               '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
+          } else if (generatorFilled) {
+            // Generator has all gasoline but is not activated
+            promptElement.innerHTML =
+              '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
+          } else if (gasolineCollected >= 1) {
+            // Player has gasoline - allow filling
+            promptElement.innerHTML = `<span style="color: #ffcc00;">[E]</span> Fill Generator (${generatorFilledAmount}/${requiredGasoline})`;
           } else {
-            // Check if player has enough gasoline
-            if (gasolineCollected >= requiredGasoline) {
-              promptElement.innerHTML =
-                '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
-            } else {
-              promptElement.innerHTML = `<span style="color: #ff6600;">[E]</span> Need more gasoline: ${gasolineCollected}/${requiredGasoline}`;
-            }
+            // No gasoline collected yet
+            promptElement.innerHTML =
+              '<span style="color: #ff6600;">[E]</span> Need gasoline to fill generator';
           }
 
           return { position: generator.position, index: index };
@@ -939,76 +967,22 @@ document.addEventListener("keydown", (e) => {
       const index = closestGenerator.index;
       const promptElement = document.getElementById("interactionPrompt");
 
-      // Check if player has enough gasoline to activate generator
-      if (!generatorStatus[index] && gasolineCollected < requiredGasoline) {
-        // Not enough gasoline - show warning
-        promptElement.style.transform = "translateX(-50%) scale(1.1)";
-        promptElement.style.border = "2px solid #ff3300";
-        promptElement.style.boxShadow = "0 0 15px rgba(255, 51, 0, 0.6)";
-        promptElement.innerHTML = `<span style="color: #ff3300;">[!]</span> Need more gasoline: ${gasolineCollected}/${requiredGasoline}`;
+      // Different interactions based on generator state
+      if (generatorStatus[index]) {
+        // Generator is already running - turn it off
+        generatorStatus[index] = false;
 
-        // Reset UI after feedback
-        setTimeout(() => {
-          promptElement.style.border = "2px solid #ff6600";
-          promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
-          promptElement.innerHTML =
-            '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
-          promptElement.style.transform = "translateX(-50%) scale(0.95)";
-        }, 2000);
-
-        return; // Stop here - can't activate
-      }
-
-      // Toggle status generator - if activating, consume the gasoline
-      const newStatus = !generatorStatus[index];
-
-      // If turning on, consume gasoline
-      if (newStatus && !generatorStatus[index]) {
-        // Play generator startup sound
+        // Update status in the audio system
         if (isAudioSystemReady()) {
-          audioSystem.playGeneratorStartupSound(index);
-        }
-      }
-
-      generatorStatus[index] = newStatus;
-
-      // Update status in the audio system
-      if (isAudioSystemReady()) {
-        audioSystem.setGeneratorStatus(index, newStatus);
-      }
-
-      // Visual feedback animation for the prompt
-      promptElement.style.transform = "translateX(-50%) scale(1.1)";
-      setTimeout(() => {
-        promptElement.style.transform = "translateX(-50%) scale(0.95)";
-      }, 100);
-
-      if (newStatus) {
-        console.log(`Generator diaktifkan!`);
-
-        // Tambahkan visual feedback saat generator aktif
-        promptElement.style.border = "2px solid #00ff00";
-        promptElement.style.boxShadow = "0 0 15px rgba(0, 255, 0, 0.6)";
-        promptElement.innerHTML =
-          '<span style="color: #00ff00;">[E]</span> Generator Aktif';
-
-        // Reset visual style after feedback
-        setTimeout(() => {
-          if (generatorStatus[index]) {
-            promptElement.style.border = "2px solid #ff6600";
-            promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
-            promptElement.innerHTML =
-              '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
-          }
-        }, 1000);
-      } else {
-        console.log(`Generator dinonaktifkan!`);
-
-        // Visual feedback for deactivation
+          audioSystem.setGeneratorStatus(index, false);
+        } // Visual feedback for deactivation
+        promptElement.style.transform = "translateX(-50%) scale(1.1)";
         promptElement.style.border = "2px solid #ff0000";
         promptElement.style.boxShadow = "0 0 15px rgba(255, 0, 0, 0.6)";
         promptElement.innerHTML =
           '<span style="color: #ff0000;">[E]</span> Generator Nonaktif';
+
+        console.log(`Generator dinonaktifkan!`);
 
         // Reset UI after feedback
         setTimeout(() => {
@@ -1019,6 +993,88 @@ document.addEventListener("keydown", (e) => {
               '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
           }
         }, 1000);
+      } else if (generatorFilled) {
+        // Generator has been filled with gasoline - activate it
+        generatorStatus[index] = true; // Play generator startup sound
+        if (isAudioSystemReady()) {
+          audioSystem.playGeneratorStartupSound(index);
+        }
+
+        // Update status in the audio system
+        if (isAudioSystemReady()) {
+          audioSystem.setGeneratorStatus(index, true);
+        }
+
+        // Visual feedback animation for the prompt
+        promptElement.style.transform = "translateX(-50%) scale(1.1)";
+        promptElement.style.border = "2px solid #00ff00";
+        promptElement.style.boxShadow = "0 0 15px rgba(0, 255, 0, 0.6)";
+        promptElement.innerHTML =
+          '<span style="color: #00ff00;">[E]</span> Generator Aktif';
+
+        console.log(`Generator diaktifkan!`);
+
+        // Reset visual style after feedback
+        setTimeout(() => {
+          if (generatorStatus[index]) {
+            promptElement.style.border = "2px solid #ff6600";
+            promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
+            promptElement.innerHTML =
+              '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
+          }
+          promptElement.style.transform = "translateX(-50%) scale(0.95)";
+        }, 1000);
+      } else if (gasolineCollected >= 1 && !generatorFilled) {
+        // Directly fill generator
+        gasolineCollected--;
+        generatorFilledAmount++;
+        updateGasolineUI();
+
+        // Visual feedback for partial fill
+        promptElement.style.transform = "translateX(-50%) scale(1.1)";
+        promptElement.style.border = "2px solid #ffcc00";
+        promptElement.style.boxShadow = "0 0 15px rgba(255, 204, 0, 0.6)";
+        promptElement.innerHTML = `<span style="color: #ffcc00;">[E]</span> Generator Filled (${generatorFilledAmount}/${requiredGasoline})`;
+
+        console.log(
+          `Generator filled: ${generatorFilledAmount}/${requiredGasoline}`
+        );
+
+        // Only set generator as filled when we have all required gasoline
+        if (generatorFilledAmount >= requiredGasoline) {
+          generatorFilled = true;
+          // Update prompt to activate
+          setTimeout(() => {
+            promptElement.style.border = "2px solid #ff6600";
+            promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
+            promptElement.innerHTML =
+              '<span style="color: #ff6600;">[E]</span> Aktifkan Generator';
+            promptElement.style.transform = "translateX(-50%) scale(0.95)";
+          }, 1000);
+        } else {
+          // Reset UI after feedback
+          setTimeout(() => {
+            promptElement.style.transform = "translateX(-50%) scale(0.95)";
+            promptElement.style.border = "2px solid #ff6600";
+            promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
+          }, 1000);
+        }
+      } else {
+        // No gasoline - show warning
+        promptElement.style.transform = "translateX(-50%) scale(1.1)";
+        promptElement.style.border = "2px solid #ff3300";
+        promptElement.style.boxShadow = "0 0 15px rgba(255, 51, 0, 0.6)";
+        promptElement.innerHTML =
+          '<span style="color: #ff3300;">[!]</span> Need at least 1 gasoline can';
+
+        // Reset UI after feedback
+        setTimeout(() => {
+          promptElement.style.border = "2px solid #ff6600";
+          promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
+          promptElement.innerHTML =
+            '<span style="color: #ff6600;">[E]</span> Need gasoline to fill generator';
+          promptElement.style.transform = "translateX(-50%) scale(0.95)";
+        }, 2000);
       }
       return; // Stop here if interacting with generator
     } // Check for gasoline interaction if not interacting with generator
@@ -1175,6 +1231,82 @@ gasolineIndicator.appendChild(gasolineCountText);
 
 document.body.appendChild(gasolineIndicator);
 
+// Create slider mini-game UI for filling the generator
+const sliderGameContainer = document.createElement("div");
+sliderGameContainer.id = "sliderGameContainer";
+sliderGameContainer.style.position = "absolute";
+sliderGameContainer.style.top = "50%";
+sliderGameContainer.style.left = "50%";
+sliderGameContainer.style.width = "400px";
+sliderGameContainer.style.height = "100px";
+sliderGameContainer.style.transform = "translate(-50%, -50%)";
+sliderGameContainer.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+sliderGameContainer.style.borderRadius = "10px";
+sliderGameContainer.style.padding = "20px";
+sliderGameContainer.style.display = "none";
+sliderGameContainer.style.flexDirection = "column";
+sliderGameContainer.style.alignItems = "center";
+sliderGameContainer.style.justifyContent = "center";
+sliderGameContainer.style.zIndex = "1001";
+sliderGameContainer.style.border = "2px solid #ffcc00";
+sliderGameContainer.style.boxShadow = "0 0 15px rgba(255, 204, 0, 0.6)";
+
+// Title for the mini-game
+const sliderGameTitle = document.createElement("div");
+sliderGameTitle.innerHTML = "Fill Generator - Press SPACE in the target zone!";
+sliderGameTitle.style.color = "white";
+sliderGameTitle.style.fontFamily = "Arial, sans-serif";
+sliderGameTitle.style.fontSize = "16px";
+sliderGameTitle.style.fontWeight = "bold";
+sliderGameTitle.style.marginBottom = "15px";
+sliderGameContainer.appendChild(sliderGameTitle);
+
+// Slider bar
+const sliderBar = document.createElement("div");
+sliderBar.id = "sliderBar";
+sliderBar.style.width = "350px";
+sliderBar.style.height = "20px";
+sliderBar.style.backgroundColor = "#333";
+sliderBar.style.borderRadius = "10px";
+sliderBar.style.position = "relative";
+sliderBar.style.overflow = "hidden";
+sliderGameContainer.appendChild(sliderBar);
+
+// Target zone on the slider
+const targetZone = document.createElement("div");
+targetZone.id = "targetZone";
+targetZone.style.position = "absolute";
+targetZone.style.width = "50px"; // Initial width - will get smaller with each attempt
+targetZone.style.height = "100%";
+targetZone.style.backgroundColor = "#00ff00";
+targetZone.style.left = "150px"; // Center initially
+targetZone.style.borderRadius = "10px";
+sliderBar.appendChild(targetZone);
+
+// Moving slider indicator
+const sliderIndicator = document.createElement("div");
+sliderIndicator.id = "sliderIndicator";
+sliderIndicator.style.position = "absolute";
+sliderIndicator.style.width = "10px";
+sliderIndicator.style.height = "100%";
+sliderIndicator.style.backgroundColor = "#ffffff";
+sliderIndicator.style.borderRadius = "5px";
+sliderIndicator.style.left = "0px";
+sliderBar.appendChild(sliderIndicator);
+
+// Instruction text
+const instructionText = document.createElement("div");
+instructionText.id = "instructionText";
+instructionText.innerHTML =
+  "Press SPACE when the white marker is in the green zone";
+instructionText.style.color = "white";
+instructionText.style.fontFamily = "Arial, sans-serif";
+instructionText.style.fontSize = "14px";
+instructionText.style.marginTop = "10px";
+sliderGameContainer.appendChild(instructionText);
+
+document.body.appendChild(sliderGameContainer);
+
 // Function to update gasoline UI
 function updateGasolineUI() {
   const gasolineCountElement = document.getElementById("gasolineCount");
@@ -1259,7 +1391,7 @@ generatorLoader.load(
     const generatorModel = gltf.scene;
 
     // Only one generator at a strategic position
-    const generatorPosition = { x: 5, y: 0.5, z: -10 }; // Keep only the first generator
+    const generatorPosition = { x: 5, y: 1, z: -10 }; // Keep only the first generator
 
     // Add slight randomization to position
     const randomOffset = Math.random() * 3 - 1.5; // Between -1.5 and 1.5
@@ -1273,7 +1405,7 @@ generatorLoader.load(
       generatorPosition.y,
       generatorPosition.z
     );
-    generatorInstance.scale.set(0.01, 0.01, 0.01);
+    generatorInstance.scale.set(0.03, 0.03, 0.03);
     generatorInstance.userData.generatorId = "generator-0";
 
     scene.add(generatorInstance);
@@ -1477,13 +1609,13 @@ for (const treeType of treeTypes) {
       scene.add(tree);
       // Collision box presisi sesuai scale tree
       let box;
-      if (treeType.file.includes('ancient_tree')) {
+      if (treeType.file.includes("ancient_tree")) {
         // Ukuran asli ancient_tree.glb setelah scale 0.01
         box = new THREE.Box3(
           new THREE.Vector3(pos.x - 2.5, 0, pos.z - 2.5),
           new THREE.Vector3(pos.x + 2.5, 10, pos.z + 2.5)
         );
-      } else if (treeType.file.includes('tree_1')) {
+      } else if (treeType.file.includes("tree_1")) {
         // Ukuran asli tree_1.glb setelah scale 0.7
         box = new THREE.Box3(
           new THREE.Vector3(pos.x - 1.5, 0, pos.z - 1.5),
@@ -1596,7 +1728,6 @@ function animate() {
       cursorDot.style.height = "6px";
     }
   }
-
   // Update flashlight position and target every frame
   updateFlashlight();
 
@@ -1693,6 +1824,7 @@ streetLampLoader.load(
       function animateLampLight() {
         // Generate random flicker patterns
         const flickerPattern = Math.random(); // Different flickering patterns for each lamp
+
         if (flickerPattern < 1) {
           // Occasional complete blackout (20% chance)
           lampLight.intensity = 0;
@@ -1705,7 +1837,7 @@ streetLampLoader.load(
         //   lampLight.intensity = 0; // Complete darkness instead of dim
         //   setTimeout(() => {
         //     lampLight.intensity = 1.5;
-        //   }, 600 + Math.random() * 900); // Extended darkness period 600-1500ms
+        //   }, 600 + Math.random() * 900); // Extended darkness period  600-1500ms
         // }
         else {
           // Subtle pulsing (30% chance)
@@ -1721,6 +1853,7 @@ streetLampLoader.load(
       animateLampLight();
 
       // Add collision detection for the lamp
+
       const lampBox = new THREE.Box3().setFromObject(lampInstance);
       graveCollisionBoxes.push(lampBox); // Use same collision system as graves
 
