@@ -1289,7 +1289,6 @@ generatorLoader.load(
 
     // Add collision detection for generator
     const generatorBox = new THREE.Box3().setFromObject(generatorInstance);
-    generatorBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
     graveCollisionBoxes.push(generatorBox); // Use same collision system as graves
 
     console.log(
@@ -1336,7 +1335,7 @@ gasolineLoader.load(
 
       // Add collision detection for gasoline
       const gasolineBox = new THREE.Box3().setFromObject(gasolineInstance);
-      gasolineBox.expandByVector(new THREE.Vector3(0.5, 0.5, 0.5)); // Add buffer
+      gasolineBox.expandByVector(new THREE.Vector3(0.2, 0.2, 0.2)); // Add small buffer
       graveCollisionBoxes.push(gasolineBox); // Use same collision system as graves
 
       console.log(
@@ -1390,7 +1389,7 @@ gasolineLoader.load(
 
     // Add collision detection
     const randomGasolineBox = new THREE.Box3().setFromObject(randomGasoline);
-    randomGasolineBox.expandByVector(new THREE.Vector3(0.5, 0.5, 0.5));
+    randomGasolineBox.expandByVector(new THREE.Vector3(0.2, 0.2, 0.2)); // Add small buffer
     graveCollisionBoxes.push(randomGasolineBox);
 
     console.log("Random Gasoline placed at position:", randomGasoline.position);
@@ -1401,139 +1400,104 @@ gasolineLoader.load(
   }
 );
 
-// --- TREE SPAWNING WITH SPACING AND COLLISION ---
+// --- TREE SPAWNING WITH STATIC POSITIONS, NO NEAR SPAWN/OBJECTS ---
+const importantObjects = [
+  { x: 0, z: 15 }, // spawn player
+  { x: 0, z: 5 }, // corpse
+  { x: 5, z: -10 }, // generator
+  { x: 22, z: -20 }, // gasoline
+  { x: -14, z: -25 }, // gasoline
+  { x: 15, z: 25 }, // gasoline
+  { x: -20, z: 25 }, // gasoline
+  { x: -10, z: 10 }, // lamp
+  { x: 15, z: -15 }, // lamp
+  { x: -15, z: -15 }, // lamp
+  { x: 20, z: 20 }, // lamp
+  { x: -20, z: 20 }, // lamp
+  { x: 0, z: -20 }, // lamp
+  { x: 0, z: 25 }, // lamp
+];
+
+function isFarFromImportant(pos, minDist = 10) {
+  for (const obj of importantObjects) {
+    const dx = pos.x - obj.x;
+    const dz = pos.z - obj.z;
+    if (Math.sqrt(dx * dx + dz * dz) < minDist) return false;
+  }
+  return true;
+}
+
+function generateTreePositions(count, mapBoundary, minDist = 10) {
+  const positions = [];
+  let attempts = 0;
+  while (positions.length < count && attempts < 1000) {
+    const x = Math.round((Math.random() * 2 - 1) * (mapBoundary - 3));
+    const z = Math.round((Math.random() * 2 - 1) * (mapBoundary - 3));
+    const pos = { x, z };
+    if (isFarFromImportant(pos, minDist)) {
+      // Also avoid too close to other trees
+      let tooClose = false;
+      for (const t of positions) {
+        if (Math.sqrt((t.x - x) ** 2 + (t.z - z) ** 2) < minDist * 0.8) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (!tooClose) positions.push(pos);
+    }
+    attempts++;
+  }
+  return positions;
+}
+
 const treeTypes = [
   {
     file: "./public/ancient_tree.glb",
-    count: 20, // Increased from 10
+    count: 40,
     scale: [0.01, 0.01, 0.01],
+    positions: generateTreePositions(20, mapBoundary, 12),
   },
-  // { file: "./public/oak_tree.glb", count: 25, scale: [5, 5, 5] },
-  { file: "./public/tree_1.glb", count: 20, scale: [0.7, 0.7, 0.7] }, // Increased from 12
+  {
+    file: "./public/tree_1.glb",
+    count: 40,
+    scale: [0.7, 0.7, 0.7],
+    positions: generateTreePositions(20, mapBoundary, 10),
+  },
 ];
 
 const treeLoader = new GLTFLoader();
-const treeAreaMargin = 4; // Hindari area tengah dan objek penting
-const minTreeDistance = 6; // Minimal jarak antar pohon
-
-// Kumpulkan posisi objek penting (generator, campfire, bangunan, grave, bangunan hancur)
-const importantBoxes = [];
-// Generator
-function addImportantBoxFromObject(obj) {
-  if (!obj) return;
-  const box = new THREE.Box3().setFromObject(obj);
-  importantBoxes.push(box);
-}
-generatorObjects.forEach(addImportantBoxFromObject);
-// Campfire
-// let campfireBox = null;
-// if (typeof campfireModel !== "undefined") {
-//   campfireBox = new THREE.Box3().setFromObject(campfireModel);
-//   importantBoxes.push(campfireBox);
-// }
-// Bangunan hancur reference removed
-// Graveyard
-for (const box of graveCollisionBoxes) {
-  importantBoxes.push(box.clone());
-}
-
-// Simpan posisi tree yang sudah ditempatkan
-const placedTreePositions = [];
-
-function isFarFromOtherTrees(x, z) {
-  for (const pos of placedTreePositions) {
-    const dx = x - pos.x;
-    const dz = z - pos.z;
-    if (Math.sqrt(dx * dx + dz * dz) < minTreeDistance) return false;
-  }
-  return true;
-}
-
-function isFarFromImportantObjects(x, z) {
-  const testPoint = new THREE.Vector3(x, 0, z);
-  for (const box of importantBoxes) {
-    if (box.containsPoint(testPoint)) return false;
-    // Buffer: jika terlalu dekat dengan bounding box
-    const expandBox = box.clone().expandByScalar(2.5);
-    if (expandBox.containsPoint(testPoint)) return false;
-  }
-  return true;
-}
-
-function getRandomTreePositionSafe() {
-  let x,
-    z,
-    tries = 0;
-  const playerSpawn = { x: 0, z: 15, radius: 5 };
-  let valid = false;
-  while (!valid && tries < 200) {
-    x = Math.random() * (mapBoundary * 2) - mapBoundary;
-    z = Math.random() * (mapBoundary * 2) - mapBoundary;
-    tries++;
-    const distToSpawn = Math.sqrt(
-      (x - playerSpawn.x) ** 2 + (z - playerSpawn.z) ** 2
-    );
-    valid =
-      (Math.abs(x) >= treeAreaMargin || Math.abs(z) >= treeAreaMargin) &&
-      (x <= -10 || x >= 10 || z <= 5 || z >= 15) &&
-      isFarFromOtherTrees(x, z) &&
-      isFarFromImportantObjects(x, z) &&
-      distToSpawn >= playerSpawn.radius;
-  }
-  // Jika gagal dapat posisi valid setelah 200 kali, spawn saja di posisi random di pinggir map
-  if (!valid) {
-    x = (Math.random() < 0.5 ? -1 : 1) * (mapBoundary - 2);
-    z = (Math.random() < 0.5 ? -1 : 1) * (mapBoundary - 2);
-  }
-  return { x, y: 0, z };
-}
-
-treeTypes.forEach((treeType) => {
-  treeLoader.load(
-    treeType.file,
-    (gltf) => {
-      for (let i = 0; i < treeType.count; i++) {
-        const tree = gltf.scene.clone();
-        const pos = getRandomTreePositionSafe();
-        tree.position.set(pos.x, pos.y, pos.z);
-        tree.scale.set(...treeType.scale);
-        tree.rotation.y = Math.random() * Math.PI * 2;
-        scene.add(tree);
-        placedTreePositions.push({ x: pos.x, z: pos.z });
-        // Tambahkan collision box hanya pada batang (trunk) jika ada
-        let treeBox = null;
-        let trunk =
-          tree.getObjectByName("trunk") ||
-          tree.getObjectByName("Trunk") ||
-          tree.getObjectByName("batang");
-        if (trunk) {
-          treeBox = new THREE.Box3().setFromObject(trunk);
-        } else {
-          // Jika tidak ada trunk, gunakan bounding box model tapi diperkecil pada X dan Z
-          treeBox = new THREE.Box3().setFromObject(tree);
-          const center = new THREE.Vector3();
-          treeBox.getCenter(center);
-          const size = new THREE.Vector3();
-          treeBox.getSize(size);
-          // Perkecil X dan Z (hanya batang)
-          size.x *= 0.3;
-          size.z *= 0.3;
-          treeBox.min.x = center.x - size.x / 2;
-          treeBox.max.x = center.x + size.x / 2;
-          treeBox.min.z = center.z - size.z / 2;
-          treeBox.max.z = center.z + size.z / 2;
-        }
-        graveCollisionBoxes.push(treeBox);
+for (const treeType of treeTypes) {
+  treeLoader.load(treeType.file, (gltf) => {
+    for (let i = 0; i < treeType.count; i++) {
+      const pos = treeType.positions[i];
+      if (!pos) continue;
+      const tree = gltf.scene.clone();
+      tree.position.set(pos.x, 0, pos.z);
+      tree.scale.set(...treeType.scale);
+      scene.add(tree);
+      // Collision box presisi sesuai scale tree
+      let box;
+      if (treeType.file.includes('ancient_tree')) {
+        // Ukuran asli ancient_tree.glb setelah scale 0.01
+        box = new THREE.Box3(
+          new THREE.Vector3(pos.x - 2.5, 0, pos.z - 2.5),
+          new THREE.Vector3(pos.x + 2.5, 10, pos.z + 2.5)
+        );
+      } else if (treeType.file.includes('tree_1')) {
+        // Ukuran asli tree_1.glb setelah scale 0.7
+        box = new THREE.Box3(
+          new THREE.Vector3(pos.x - 1.5, 0, pos.z - 1.5),
+          new THREE.Vector3(pos.x + 1.5, 8, pos.z + 1.5)
+        );
+      } else {
+        // Fallback ke bounding box dari objek
+        box = new THREE.Box3().setFromObject(tree);
       }
-      console.log(`${treeType.file} loaded and scattered as forest`);
-    },
-    undefined,
-    (error) => {
-      console.error(`Error loading tree asset ${treeType.file}:`, error);
+      graveCollisionBoxes.push(box);
     }
-  );
-});
-// --- END TREE SPAWNING ---
+    console.log(`${treeType.file} loaded and placed at filtered positions.`);
+  });
+}
 
 // Array for tracking gasoline objects
 const gasolineObjects = [];
@@ -1758,7 +1722,6 @@ streetLampLoader.load(
 
       // Add collision detection for the lamp
       const lampBox = new THREE.Box3().setFromObject(lampInstance);
-      lampBox.expandByVector(new THREE.Vector3(0.5, 2, 0.5)); // Add buffer
       graveCollisionBoxes.push(lampBox); // Use same collision system as graves
 
       console.log(`Street lamp added at position (${pos.x}, ${pos.z})`);
