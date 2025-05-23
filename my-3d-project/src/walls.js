@@ -251,6 +251,8 @@ export function addBrickWalls(scene, collisionBoxes) {
 
         // Add to scene
         scene.add(wallInstance);
+        // Set shadow untuk semua mesh pada wall
+        setShadowRecursively(wallInstance);
 
         // Create bounding box for collision detection
         const wallBox = new THREE.Box3().setFromObject(wallInstance);
@@ -268,4 +270,18 @@ export function addBrickWalls(scene, collisionBoxes) {
       console.error("Error loading brick and stone wall asset:", error);
     }
   );
+}
+
+// Utility: Set castShadow & receiveShadow untuk semua mesh dalam objek (rekursif)
+function setShadowRecursively(object, cast = true, receive = true) {
+  object.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = cast;
+      child.receiveShadow = receive;
+      // Untuk material transparan, aktifkan shadow
+      if (child.material) {
+        child.material.shadowSide = THREE.FrontSide;
+      }
+    }
+  });
 }
