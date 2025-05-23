@@ -1974,13 +1974,54 @@ streetLampLoader.load(
           testTree.scale.set(0.01, 0.01, 0.01);
           setShadowRecursively(testTree);
           scene.add(testTree);
-          // Collision box presisi sesuai scale tree
           const box = new THREE.Box3(
             new THREE.Vector3(-8 - 2.5, 0, 10 - 2.5),
             new THREE.Vector3(-8 + 2.5, 10, 10 + 2.5)
           );
           graveCollisionBoxes.push(box);
           console.log("[TEST] Ancient tree for shadow test placed at (-8, 0, 10)");
+        });
+        // Tambah gasoline di dekat lampu pertama
+        const gasolineLoader = new GLTFLoader();
+        gasolineLoader.load("./public/gasoline.glb", (gltf) => {
+          const gasoline = gltf.scene.clone();
+          gasoline.position.set(-13, 0, 12);
+          gasoline.scale.set(2, 2, 2);
+          setShadowRecursively(gasoline);
+          scene.add(gasoline);
+          const box = new THREE.Box3().setFromObject(gasoline);
+          box.expandByVector(new THREE.Vector3(0.2, 0.2, 0.2));
+          graveCollisionBoxes.push(box);
+          console.log("[TEST] Gasoline for shadow test placed at (-13, 0, 12)");
+        });
+        // Tambah pohon tree_1 di dekat lampu pertama
+        const tree1Loader = new GLTFLoader();
+        tree1Loader.load("./public/tree_1.glb", (gltf) => {
+          const tree1 = gltf.scene.clone();
+          tree1.position.set(-7, 0, 13);
+          tree1.scale.set(0.7, 0.7, 0.7);
+          setShadowRecursively(tree1);
+          scene.add(tree1);
+          const box = new THREE.Box3(
+            new THREE.Vector3(-7 - 1.5, 0, 13 - 1.5),
+            new THREE.Vector3(-7 + 1.5, 8, 13 + 1.5)
+          );
+          graveCollisionBoxes.push(box);
+          console.log("[TEST] tree_1 for shadow test placed at (-7, 0, 13)");
+        });
+      }
+      // Tambah generator di dekat lampu kedua
+      if (idx === 1) {
+        const generatorLoader = new GLTFLoader();
+        generatorLoader.load("./public/generator.glb", (gltf) => {
+          const generator = gltf.scene.clone();
+          generator.position.set(17, 1, -18);
+          generator.scale.set(0.03, 0.03, 0.03);
+          setShadowRecursively(generator);
+          scene.add(generator);
+          const box = new THREE.Box3().setFromObject(generator);
+          graveCollisionBoxes.push(box);
+          console.log("[TEST] Generator for shadow test placed at (17, 1, -18)");
         });
       }
     });
