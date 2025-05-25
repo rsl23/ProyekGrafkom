@@ -13,6 +13,10 @@ const renderer = new THREE.WebGLRenderer({ canvas });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
+// Aktifkan shadow map pada renderer
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft shadow untuk hasil lebih halus
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x212121);
 
@@ -54,6 +58,7 @@ const floorMat = new THREE.MeshStandardMaterial({ map: grassTexture });
 
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true; // Floor menerima shadow
 scene.add(floor);
 
 // Create a grid of smaller grass panels
@@ -63,10 +68,15 @@ const gridSize = 10;
 for (let i = -gridSize / 2; i < gridSize / 2; i++) {
   for (let j = -gridSize / 2; j < gridSize / 2; j++) {
     const panelGeo = new THREE.PlaneGeometry(panelSize, panelSize);
-    const panelMat = new THREE.MeshStandardMaterial({ map: grassTexture });
+    const panelMat = new THREE.MeshStandardMaterial({
+      map: grassTexture,
+      side: THREE.DoubleSide // Pastikan panel menerima shadow dari dua sisi
+    });
     const panel = new THREE.Mesh(panelGeo, panelMat);
     panel.rotation.x = -Math.PI / 2;
     panel.position.set(i * panelSize, 0, j * panelSize);
+    panel.receiveShadow = true; // Panel grass menerima shadow
+    panel.castShadow = false; // Pastikan panel tidak menghasilkan shadow
     scene.add(panel);
   }
 }
@@ -84,6 +94,22 @@ corpseLoader.load(
     corpseModel.scale.set(2, 2, 2); // Adjust scale as needed
     corpseModel.rotation.y = Math.PI / 2; // Rotate for better visibility
     scene.add(corpseModel);
+
+    // Utility: Set castShadow & receiveShadow untuk semua mesh dalam objek (rekursif)
+    function setShadowRecursively(object, cast = true, receive = true) {
+      object.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = cast;
+          child.receiveShadow = receive;
+          // Untuk material transparan, aktifkan shadow
+          if (child.material) {
+            child.material.shadowSide = THREE.FrontSide;
+          }
+        }
+      });
+    }
+
+    setShadowRecursively(corpseModel);
 
     // Add collision for the corpse so player can't walk through it
     const corpseBox = new THREE.Box3().setFromObject(corpseModel);
@@ -224,6 +250,8 @@ graveyardLoader.load(
           graveInstance.position.z <= mapBoundary
         ) {
           scene.add(graveInstance);
+          // Set shadow untuk semua mesh pada grave
+          setShadowRecursively(graveInstance);
           // Buat bounding box dan expand sumbu Y agar mencakup posisi pemain (misal sampai y=2)
           const box = new THREE.Box3().setFromObject(graveInstance);
           box.expandByVector(new THREE.Vector3(0, 2, 0));
@@ -312,6 +340,7 @@ loader.load(
     houseModel.position.set(-20, 0, -26); // Position the house
     houseModel.scale.set(0.5, 0.5, 0.5); // Double the size of the house
     scene.add(houseModel);
+    setShadowRecursively(houseModel); // Pastikan house/grave menerima dan menghasilkan shadow
 
     // Assuming stairs are part of the house model, calculate bounding box
     stairsBoundingBox = new THREE.Box3().setFromObject(
@@ -427,6 +456,11 @@ flashlight.target.position.set(
   camera.position.z + camera.getWorldDirection(new THREE.Vector3()).z * 10
 );
 flashlight.castShadow = true;
+flashlight.shadow.mapSize.width = 1024;
+flashlight.shadow.mapSize.height = 1024;
+flashlight.shadow.camera.near = 0.1;
+flashlight.shadow.camera.far = 100;
+flashlight.shadow.bias = -0.005;
 scene.add(flashlight);
 scene.add(flashlight.target);
 
@@ -1435,6 +1469,22 @@ generatorLoader.load(
 
     scene.add(generatorInstance);
 
+    // Utility: Set castShadow & receiveShadow untuk semua mesh dalam objek (rekursif)
+    function setShadowRecursively(object, cast = true, receive = true) {
+      object.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = cast;
+          child.receiveShadow = receive;
+          // Untuk material transparan, aktifkan shadow
+          if (child.material) {
+            child.material.shadowSide = THREE.FrontSide;
+          }
+        }
+      });
+    }
+
+    setShadowRecursively(generatorInstance);
+
     // Store reference for interaction
     generatorObjects.push(generatorInstance);
     generatorStatus[0] = false; // Set status awal ke nonaktif
@@ -1490,6 +1540,22 @@ gasolineLoader.load(
 
       scene.add(gasolineInstance);
 
+      // Utility: Set castShadow & receiveShadow untuk semua mesh dalam objek (rekursif)
+      function setShadowRecursively(object, cast = true, receive = true) {
+        object.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = cast;
+            child.receiveShadow = receive;
+            // Untuk material transparan, aktifkan shadow
+            if (child.material) {
+              child.material.shadowSide = THREE.FrontSide;
+            }
+          }
+        });
+      }
+
+      setShadowRecursively(gasolineInstance);
+
       // Add collision detection for gasoline
       const gasolineBox = new THREE.Box3().setFromObject(gasolineInstance);
       gasolineBox.expandByVector(new THREE.Vector3(0.2, 0.2, 0.2)); // Add small buffer
@@ -1543,6 +1609,22 @@ gasolineLoader.load(
     randomGasoline.userData.gasolineId = "gasoline-random";
 
     scene.add(randomGasoline);
+
+    // Utility: Set castShadow & receiveShadow untuk semua mesh dalam objek (rekursif)
+    function setShadowRecursively(object, cast = true, receive = true) {
+      object.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = cast;
+          child.receiveShadow = receive;
+          // Untuk material transparan, aktifkan shadow
+          if (child.material) {
+            child.material.shadowSide = THREE.FrontSide;
+          }
+        }
+      });
+    }
+
+    setShadowRecursively(randomGasoline);
 
     // Add collision detection
     const randomGasolineBox = new THREE.Box3().setFromObject(randomGasoline);
@@ -1639,7 +1721,29 @@ for (const treeType of treeTypes) {
       const tree = gltf.scene.clone();
       tree.position.set(pos.x, 0, pos.z);
       tree.scale.set(...treeType.scale);
+<<<<<<< HEAD
       scene.add(tree); // Collision box presisi sesuai scale tree
+=======
+      scene.add(tree);
+
+      // Utility: Set castShadow & receiveShadow untuk semua mesh dalam objek (rekursif)
+      function setShadowRecursively(object, cast = true, receive = true) {
+        object.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = cast;
+            child.receiveShadow = receive;
+            // Untuk material transparan, aktifkan shadow
+            if (child.material) {
+              child.material.shadowSide = THREE.FrontSide;
+            }
+          }
+        });
+      }
+
+      setShadowRecursively(tree);
+
+      // Collision box presisi sesuai scale tree
+>>>>>>> 7d7cd1383801e619b1d70ecea591deaea3387cde
       let box;
       if (treeType.file.includes("ancient_tree")) {
         // Ukuran asli ancient_tree.glb setelah scale 0.01
@@ -1837,7 +1941,7 @@ streetLampLoader.load(
     ];
 
     // Add each lamp to the scene
-    lampPositions.forEach((pos) => {
+    lampPositions.forEach((pos, idx) => {
       const lampInstance = streetLampModel.clone();
       lampInstance.position.set(pos.x, 0, pos.z);
 
@@ -1847,45 +1951,53 @@ streetLampLoader.load(
       // Random slight rotation for variety
       lampInstance.rotation.y = Math.random() * Math.PI * 2;
 
-      scene.add(lampInstance); // Add point light for each lamp
+      scene.add(lampInstance);
+
+      // Utility: Set castShadow & receiveShadow untuk semua mesh dalam objek (rekursif)
+      function setShadowRecursively(object, cast = true, receive = true) {
+        object.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = cast;
+            child.receiveShadow = receive;
+            // Untuk material transparan, aktifkan shadow
+            if (child.material) {
+              child.material.shadowSide = THREE.FrontSide;
+            }
+          }
+        });
+      }
+
+      setShadowRecursively(lampInstance);
+
+      // Add point light for each lamp
       const lampLight = new THREE.PointLight(0xffffcc, 1.5, 15);
       lampLight.position.set(pos.x, 4, pos.z); // Position light at the top of the lamp
       lampLight.castShadow = true;
 
       // Configure shadow properties
-      lampLight.shadow.mapSize.width = 512;
-      lampLight.shadow.mapSize.height = 512;
+      lampLight.shadow.mapSize.width = 1024;
+      lampLight.shadow.mapSize.height = 1024;
       lampLight.shadow.camera.near = 0.5;
       lampLight.shadow.camera.far = 20;
+      lampLight.shadow.bias = -0.005;
 
-      scene.add(lampLight); // Add dramatic flickering effect for horror atmosphere
+      scene.add(lampLight);
+
+      // Update: lampLight shadow ON/OFF mengikuti intensitas lampu (flicker)
       function animateLampLight() {
-        // Generate random flicker patterns
-        const flickerPattern = Math.random(); // Different flickering patterns for each lamp
-
+        const flickerPattern = Math.random();
         if (flickerPattern < 1) {
-          // Occasional complete blackout (20% chance)
           lampLight.intensity = 0;
+          lampLight.castShadow = false;
           setTimeout(() => {
             lampLight.intensity = 1.5 + Math.random() * 0.5;
-          }, 800 + Math.random() * 2000); // Extended darkness period 800-2000ms
-        }
-        // else if (flickerPattern < 0.2) {
-        //   // Dimming (20% chance)
-        //   lampLight.intensity = 0; // Complete darkness instead of dim
-        //   setTimeout(() => {
-        //     lampLight.intensity = 1.5;
-        //   }, 600 + Math.random() * 900); // Extended darkness period  600-1500ms
-        // }
-        else {
-          // Subtle pulsing (30% chance)
+            lampLight.castShadow = true;
+          }, 800 + Math.random() * 2000);
+        } else {
           lampLight.intensity = 1.2 + Math.random() * 0.6;
+          lampLight.castShadow = true;
         }
-
-        // Set timing for next flicker event - all lamps flicker frequently now
-        // Fixed to around 1 second (800-1200ms) as requested
         const nextFlickerTime = 800 + Math.random() * 400;
-
         setTimeout(animateLampLight, nextFlickerTime);
       }
       animateLampLight();
@@ -1894,8 +2006,67 @@ streetLampLoader.load(
 
       const lampBox = new THREE.Box3().setFromObject(lampInstance);
       graveCollisionBoxes.push(lampBox); // Use same collision system as graves
-
       console.log(`Street lamp added at position (${pos.x}, ${pos.z})`);
+
+      // --- TEST: Add 1 ancient_tree near the first lamp for shadow test ---
+      if (idx === 0) {
+        const treeLoader = new GLTFLoader();
+        treeLoader.load("./public/ancient_tree.glb", (gltf) => {
+          const testTree = gltf.scene.clone();
+          testTree.position.set(-8, 0, 10); // Dekat lampu jalan pertama
+          testTree.scale.set(0.01, 0.01, 0.01);
+          setShadowRecursively(testTree);
+          scene.add(testTree);
+          const box = new THREE.Box3(
+            new THREE.Vector3(-8 - 2.5, 0, 10 - 2.5),
+            new THREE.Vector3(-8 + 2.5, 10, 10 + 2.5)
+          );
+          graveCollisionBoxes.push(box);
+          console.log("[TEST] Ancient tree for shadow test placed at (-8, 0, 10)");
+        });
+        // Tambah gasoline di dekat lampu pertama
+        const gasolineLoader = new GLTFLoader();
+        gasolineLoader.load("./public/gasoline.glb", (gltf) => {
+          const gasoline = gltf.scene.clone();
+          gasoline.position.set(-13, 0, 12);
+          gasoline.scale.set(2, 2, 2);
+          setShadowRecursively(gasoline);
+          scene.add(gasoline);
+          const box = new THREE.Box3().setFromObject(gasoline);
+          box.expandByVector(new THREE.Vector3(0.2, 0.2, 0.2));
+          graveCollisionBoxes.push(box);
+          console.log("[TEST] Gasoline for shadow test placed at (-13, 0, 12)");
+        });
+        // Tambah pohon tree_1 di dekat lampu pertama
+        const tree1Loader = new GLTFLoader();
+        tree1Loader.load("./public/tree_1.glb", (gltf) => {
+          const tree1 = gltf.scene.clone();
+          tree1.position.set(-7, 0, 13);
+          tree1.scale.set(0.7, 0.7, 0.7);
+          setShadowRecursively(tree1);
+          scene.add(tree1);
+          const box = new THREE.Box3(
+            new THREE.Vector3(-7 - 1.5, 0, 13 - 1.5),
+            new THREE.Vector3(-7 + 1.5, 8, 13 + 1.5)
+          );
+          graveCollisionBoxes.push(box);
+          console.log("[TEST] tree_1 for shadow test placed at (-7, 0, 13)");
+        });
+      }
+      // Tambah generator di dekat lampu kedua
+      if (idx === 1) {
+        const generatorLoader = new GLTFLoader();
+        generatorLoader.load("./public/generator.glb", (gltf) => {
+          const generator = gltf.scene.clone();
+          generator.position.set(17, 1, -18);
+          generator.scale.set(0.03, 0.03, 0.03);
+          setShadowRecursively(generator);
+          scene.add(generator);
+          const box = new THREE.Box3().setFromObject(generator);
+          graveCollisionBoxes.push(box);
+          console.log("[TEST] Generator for shadow test placed at (17, 1, -18)");
+        });
+      }
     });
 
     console.log("Street lamps loaded successfully");
