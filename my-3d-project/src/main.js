@@ -454,8 +454,8 @@ let generatorFilledAmount = 0;
 
 // Flashlight dimming variables
 const dimmingDuration = 50; // Durasi dimming (detik)
-const maxIntensity = 3; // Intensitas maksimum
-const minIntensity = 0; // Intensitas minimum (mati)
+const maxIntensity = 20; // Intensitas maksimum
+const minIntensity = 10; // Intensitas minimum (mati)
 let dimmingStartTime = Date.now(); // Waktu mulai dimming
 let isDimming = true; // Status dimming
 let isRecharging = false; // Status recharging
@@ -643,6 +643,55 @@ function updateFlashlight() {
     }
   }
 }
+
+// Utility: Set shadow for all loaded objects (call after all loaders, or after scene setup)
+function setShadowForAllObjects() {
+  scene.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+    }
+  });
+}
+// Panggil sekali setelah semua objek utama sudah dimuat (misal di akhir semua loader atau di akhir animate pertama)
+setTimeout(setShadowForAllObjects, 2000); // 2 detik setelah start, agar semua objek sudah ada
+
+// Pastikan flashlight (SpotLight) shadow map besar dan optimal
+flashlight.castShadow = true;
+flashlight.shadow.mapSize.width = 2048;
+flashlight.shadow.mapSize.height = 2048;
+flashlight.shadow.bias = -0.002;
+
+// PASTIKAN: Semua objek utama (gasoline, tree, generator, street_lamp, roundabout, grave, corpse, campfire, fence, dll) sudah traverse dan set castShadow = true, receiveShadow = true pada semua mesh-nya.
+// Sudah dilakukan pada loader masing-masing, tapi pastikan juga di bawah ini:
+// function setShadowForAllObjects() {
+//   scene.traverse((obj) => {
+//     if (obj.isMesh) {
+//       obj.castShadow = true;
+//       obj.receiveShadow = true;
+//     }
+//   });
+// }
+// setShadowForAllObjects();
+
+// PASTIKAN: Renderer shadowMap sudah aktif dan tipe PCFSoftShadowMap (SUDAH)
+// renderer.shadowMap.enabled = true;
+// renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// PASTIKAN: Flashlight (SpotLight) sudah castShadow = true dan shadow map besar
+flashlight.castShadow = true;
+flashlight.shadow.mapSize.width = 2048;
+flashlight.shadow.mapSize.height = 2048;
+flashlight.shadow.bias = -0.002;
+
+// PASTIKAN: Semua lampu lain (point light street lamp) juga castShadow = true dan shadow map besar (SUDAH)
+// Sudah di loader street lamp
+
+// TIPS: Untuk performa, jika ingin, bisa traverse dan set castShadow hanya pada objek yang dekat dengan player/flashlight, tapi untuk hasil maksimal, aktifkan saja semuanya.
+
+// Selesai. Dengan pengaturan di atas, semua objek yang disinari flashlight akan memunculkan shadow dinamis di belakangnya sesuai arah sinar dan posisi player.
+// Jika shadow masih kurang jelas, bisa tambahkan plane ground (grass panel) dengan receiveShadow = true (SUDAH), dan pastikan tidak ada ambient light terlalu terang.
+// Jika ingin shadow lebih tajam, bisa naikkan flashlight.shadow.mapSize.width/height ke 4096, tapi hati-hati performa.
 
 // Tambahkan array untuk menyimpan posisi generator
 const generatorObjects = [];
@@ -1780,15 +1829,16 @@ roundaboutLoader.load(
 //     const overlapX = halfSizeX - Math.abs(dx);
 //     const overlapZ = halfSizeZ - Math.abs(dz);
 //     // Resolusi: kembalikan sumbu dengan penetrasi lebih sedikit agar pemain bisa "slide"
-//     if (overlapX < overlapZ) {
-//       // Kembalikan pergerakan pada sumbu X, biarkan Z tetap untuk slide
-//       newPos.x = previousPos.x;
-//     } else {
-//       // Kembalikan pergerakan pada sumbu Z
-//       newPos.z = previousPos.z;
+//       if (overlapX < overlapZ) {
+//         // Kembalikan pergerakan pada sumbu X, biarkan Z tetap untuk slide
+//         newPos.x = previousPos.x;
+//       } else {
+//         // Kembalikan pergerakan pada sumbu Z
+//         newPos.z = previousPos.z;
+//       }
 //     }
-//     controls.getObject().position.copy(newPos);
-//   }
+//   });
+//   controls.getObject().position.copy(newPos);
 // }
 
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
