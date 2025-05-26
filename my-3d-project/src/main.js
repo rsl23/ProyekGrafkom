@@ -13,6 +13,10 @@ const renderer = new THREE.WebGLRenderer({ canvas });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
+// Aktifkan shadow pada renderer
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x212121);
 
@@ -45,15 +49,11 @@ scene.add(additionalDirLight);
 
 // Floor (luar rumah)
 const floorGeo = new THREE.PlaneGeometry(1000, 1000);
-
-// Load grass texture
 const grassTexture = new THREE.TextureLoader().load("./public/grass.jpg");
-
-// Update floor material to use grass texture
 const floorMat = new THREE.MeshStandardMaterial({ map: grassTexture });
-
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true; // Agar tanah menerima shadow
 scene.add(floor);
 
 // Create a grid of smaller grass panels
@@ -67,6 +67,7 @@ for (let i = -gridSize / 2; i < gridSize / 2; i++) {
     const panel = new THREE.Mesh(panelGeo, panelMat);
     panel.rotation.x = -Math.PI / 2;
     panel.position.set(i * panelSize, 0, j * panelSize);
+    panel.receiveShadow = true; // Setiap panel grass menerima shadow
     scene.add(panel);
   }
 }
@@ -126,7 +127,7 @@ fenceLoader.load(
         fenceModelScale
       );
       segment.rotation.y = Math.PI; // Rotate 180 degrees
-      segment.position.set(x, adjustedFenceHeight / 2, -mapBoundary + 1); // Updated z by +1
+      segment.position.set(x+5, adjustedFenceHeight / 2, -mapBoundary +2); // Updated z by +1
       scene.add(segment);
     }
     // Add half-size fence at the end of North side
@@ -140,7 +141,7 @@ fenceLoader.load(
     northHalfSegment.position.set(
       mapBoundary,
       adjustedFenceHeight / 2,
-      -mapBoundary + 1 // Updated z by +1
+      -mapBoundary // Updated z by +1
     );
     scene.add(northHalfSegment);
 
@@ -153,7 +154,7 @@ fenceLoader.load(
         adjustedFenceHeight,
         fenceModelScale
       );
-      segment.position.set(x, adjustedFenceHeight / 2, mapBoundary + 1);
+      segment.position.set(x, adjustedFenceHeight / 2, mapBoundary -1);
       scene.add(segment);
     }
 
@@ -167,7 +168,7 @@ fenceLoader.load(
         fenceModelScale
       );
       segment.rotation.y = Math.PI / 2;
-      segment.position.set(mapBoundary, adjustedFenceHeight / 2, z);
+      segment.position.set(mapBoundary-1, adjustedFenceHeight / 2, z);
       scene.add(segment);
     } // West side
     for (let i = -3; i <= segmentCount + 3; i = i + 3) {
@@ -179,7 +180,7 @@ fenceLoader.load(
         fenceModelScale
       );
       segment.rotation.y = Math.PI * 1.5; // Rotate 180 degrees (Math.PI/2 + Math.PI)
-      segment.position.set(-mapBoundary - 1, adjustedFenceHeight / 2, z); // Moved west wall by -1 on x-axis
+      segment.position.set(-mapBoundary, adjustedFenceHeight / 2, z); // Moved west wall by -1 on x-axis
       scene.add(segment);
     }
   },
@@ -212,10 +213,15 @@ graveyardLoader.load(
       for (let j = 0; j < cols; j++) {
         const graveInstance = graveModel.clone();
         graveInstance.position.set(startX + j * xStep, 0, startZ + i * zStep);
-        // Variasi rotasi untuk kesan natural
         graveInstance.rotation.y = Math.random() * Math.PI * 2;
-        // Sesuaikan scale jika diperlukan
         graveInstance.scale.set(0.5, 0.5, 0.5);
+        // Aktifkan shadow pada semua mesh di kuburan
+        graveInstance.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
         // Pastikan grave berada di dalam mapBoundary
         if (
           graveInstance.position.x >= -mapBoundary &&
@@ -781,7 +787,7 @@ const configureSpatialAudio = () => {
 
 // Tambahkan debugging untuk memastikan file audio dimuat dengan benar
 console.log("Loading audio file from:", "./public/suara_generator.mp3");
-
+let isAudioLoaded = true; // Track if audio is loaded successfully
 // Coba beberapa path yang mungkin untuk file audio
 const tryLoadAudio = (paths) => {
   if (paths.length === 0) {
@@ -1722,6 +1728,69 @@ function checkGasolineProximity() {
   return null;
 }
 
+let roundaboutObject = null;
+const roundaboutLoader = new GLTFLoader();
+roundaboutLoader.load(
+  "./public/roundabout_old.glb",
+  (gltf) => {
+    roundaboutObject = gltf.scene;
+    roundaboutObject.position.set(10, 0.4, 23);
+    roundaboutObject.scale.set(3, 3, 3);
+    // Aktifkan castShadow dan receiveShadow pada semua mesh di roundabout
+    roundaboutObject.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    scene.add(roundaboutObject);
+
+    // Buat bounding box collision seperti wall
+    const roundaboutBox = new THREE.Box3().setFromObject(roundaboutObject);
+    // Expand sedikit agar collision lebih nyaman
+    roundaboutBox.expandByVector(new THREE.Vector3(0.2, 2, 0.2));
+    // Simpan ke array collision box (gunakan sistem graveCollisionBoxes agar handleGraveCollision bisa dipakai)
+    graveCollisionBoxes.push(roundaboutBox);
+  },
+  undefined,
+  (error) => {
+    console.error("Error loading roundabout model:", error);
+  }
+);
+
+// Fungsi untuk collision roundabout: sliding (tidak bisa tembus, tapi bisa sliding di sisi)
+// function handleRoundaboutCollision(previousPos) {
+//   if (!roundaboutBox) return;
+//   const playerPos = controls.getObject().position;
+//   const newPos = playerPos.clone();
+//   if (
+//     newPos.x >= roundaboutBox.min.x &&
+//     newPos.x <= roundaboutBox.max.x &&
+//     newPos.z >= roundaboutBox.min.z &&
+//     newPos.z <= roundaboutBox.max.z
+//   ) {
+//     // Hitung pusat dan setengah ukuran (extent) pada sumbu X dan Z
+//     const center = new THREE.Vector3();
+//     roundaboutBox.getCenter(center);
+//     const halfSizeX = (roundaboutBox.max.x - roundaboutBox.min.x) / 2;
+//     const halfSizeZ = (roundaboutBox.max.z - roundaboutBox.min.z) / 2;
+//     // Selisih dari pusat box
+//     const dx = newPos.x - center.x;
+//     const dz = newPos.z - center.z;
+//     const overlapX = halfSizeX - Math.abs(dx);
+//     const overlapZ = halfSizeZ - Math.abs(dz);
+//     // Resolusi: kembalikan sumbu dengan penetrasi lebih sedikit agar pemain bisa "slide"
+//     if (overlapX < overlapZ) {
+//       // Kembalikan pergerakan pada sumbu X, biarkan Z tetap untuk slide
+//       newPos.x = previousPos.x;
+//     } else {
+//       // Kembalikan pergerakan pada sumbu Z
+//       newPos.z = previousPos.z;
+//     }
+//     controls.getObject().position.copy(newPos);
+//   }
+// }
+
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
   animationFrameId = requestAnimationFrame(animate);
@@ -1739,6 +1808,7 @@ function animate() {
     handleStairsCollision();
     handleFenceCollision();
     handleGraveCollision(previousPos);
+    handleRoundaboutCollision(previousPos); // Cegah pemain menabrak roundabout
 
     // Check for interactive objects
     const closestGenerator = checkGeneratorProximity();
@@ -1747,27 +1817,27 @@ function animate() {
     // Update cursor dot color based on whether player is looking at an interactive object
     const cursorDot = document.getElementById("cursorDot");
     if (closestGenerator && !closestGenerator.audioOnly) {
-      // Generator interaction - orange
       cursorDot.style.backgroundColor = "#ff6600";
       cursorDot.style.boxShadow = "0 0 5px rgba(255, 102, 0, 0.8)";
       cursorDot.style.width = "8px";
       cursorDot.style.height = "8px";
     } else if (nearbyGasoline) {
-      // Gasoline interaction - yellow
       cursorDot.style.backgroundColor = "#ffcc00";
       cursorDot.style.boxShadow = "0 0 5px rgba(255, 204, 0, 0.8)";
       cursorDot.style.width = "8px";
       cursorDot.style.height = "8px";
     } else {
-      // Reset to default when not looking at anything interactive
       cursorDot.style.backgroundColor = "white";
       cursorDot.style.boxShadow = "none";
       cursorDot.style.width = "6px";
       cursorDot.style.height = "6px";
     }
   }
-  // Update flashlight position and target every frame
   updateFlashlight();
+
+  if (roundaboutObject) {
+    roundaboutObject.rotation.y += 0.01;
+  }
 
   renderer.render(scene, camera);
 }
@@ -1818,7 +1888,7 @@ window.addEventListener("resize", () => {
 
 // Bangunan hancur has been removed
 
-// Add street lamps around the map
+// Street lamp loader
 const streetLampLoader = new GLTFLoader();
 streetLampLoader.load(
   "./public/standart_street_lamp.glb",
@@ -1840,24 +1910,23 @@ streetLampLoader.load(
     lampPositions.forEach((pos) => {
       const lampInstance = streetLampModel.clone();
       lampInstance.position.set(pos.x, 0, pos.z);
-
-      // Adjust scale if needed
       lampInstance.scale.set(2, 2, 2);
-
-      // Random slight rotation for variety
       lampInstance.rotation.y = Math.random() * Math.PI * 2;
-
-      scene.add(lampInstance); // Add point light for each lamp
+      // Aktifkan shadow pada semua mesh lampu
+      lampInstance.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(lampInstance);
+      // Lampu utama
       const lampLight = new THREE.PointLight(0xffffcc, 1.5, 15);
-      lampLight.position.set(pos.x, 4, pos.z); // Position light at the top of the lamp
-      lampLight.castShadow = true;
-
-      // Configure shadow properties
-      lampLight.shadow.mapSize.width = 512;
-      lampLight.shadow.mapSize.height = 512;
-      lampLight.shadow.camera.near = 0.5;
-      lampLight.shadow.camera.far = 20;
-
+      lampLight.position.set(pos.x, 4, pos.z);
+      lampLight.castShadow = true; // Lampu memancarkan shadow
+      lampLight.shadow.mapSize.width = 2048;
+      lampLight.shadow.mapSize.height = 2048;
+      lampLight.shadow.bias = -0.002;
       scene.add(lampLight); // Add dramatic flickering effect for horror atmosphere
       function animateLampLight() {
         // Generate random flicker patterns
@@ -1905,6 +1974,9 @@ streetLampLoader.load(
     console.error("Error loading street lamp asset:", error);
   }
 );
+
+// Tambahkan roundabout ke map
+
 
 // Function to trigger jumpscare and game over
 function triggerJumpscare() {
@@ -2114,4 +2186,18 @@ function showGameOver() {
     gameOverSound.setVolume(0.3);
     gameOverSound.play();
   });
+}
+
+// Fungsi untuk menangani collision roundabout
+function handleRoundaboutCollision(previousPos) {
+    if (roundaboutObject) {
+        const playerPos = controls.getObject().position;
+        // Buat bounding box dari geometry roundabout (mengikuti rotasi dan scale)
+        const box = new THREE.Box3().setFromObject(roundaboutObject);
+        // Perluas box sedikit agar collision tidak terlalu "nempel"
+        box.expandByScalar(0.2);
+        if (box.containsPoint(playerPos)) {
+          controls.getObject().position.copy(previousPos);
+        }
+    }
 }
