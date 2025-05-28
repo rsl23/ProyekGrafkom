@@ -1539,7 +1539,12 @@ gasolineLoader.load(
 
       // Position the gasoline and add to scene
       gasolineInstance.position.set(pos.x, pos.y, pos.z);
-      gasolineInstance.scale.set(2, 2, 2); // Adjust scale to look appropriate
+      gasolineInstance.traverse((child) => {
+        if (child.isMesh) {
+          child.scale.set(1, 1, 1);
+        }
+      });
+      gasolineInstance.scale.set(0.09, 0.09, 0.09); // Adjust scale to look appropriate
       gasolineInstance.rotation.y = Math.random() * Math.PI * 2; // Random rotation for variety
       gasolineInstance.userData.gasolineId = `gasoline-fixed-${index}`;
 
@@ -1593,7 +1598,12 @@ gasolineLoader.load(
     // Create the random gasoline
     const randomGasoline = gasolineModel.clone();
     randomGasoline.position.set(randomPosX, 0.2, randomPosZ);
-    randomGasoline.scale.set(1, 1, 1);
+    randomGasoline.traverse((child) => {
+      if (child.isMesh) {
+        child.scale.set(1, 1, 1); // Reset scale child
+      }
+    });
+    randomGasoline.scale.set(0.09, 0.09, 0.09); // Sesuaikan scale agar sama seperti fixed gasoline
     randomGasoline.rotation.y = Math.random() * Math.PI * 2;
     randomGasoline.userData.gasolineId = "gasoline-random";
 
@@ -1669,13 +1679,13 @@ const treeTypes = [
     file: "./public/ancient_tree.glb",
     count: 30,
     scale: [0.01, 0.02, 0.01],
-    positions: generateTreePositions(60, mapBoundary, 10), // Meningkatkan jumlah pohon, mengurangi jarak minimum
+    positions: generateTreePositions(50, mapBoundary, 10), // Meningkatkan jumlah pohon, mengurangi jarak minimum
   },
   {
     file: "./public/tree_1.glb",
     count: 20,
-    scale: [0.7, 0.9, 0.7],
-    positions: generateTreePositions(60, mapBoundary, 8), // Meningkatkan jumlah pohon, mengurangi jarak minimum
+    scale: [2, 3, 2],
+    positions: generateTreePositions(50, mapBoundary, 8), // Meningkatkan jumlah pohon, mengurangi jarak minimum
   },
   {
     file: "./public/oak_tree.glb", // Menambah jenis pohon baru (oak_tree)
@@ -1708,13 +1718,15 @@ for (const treeType of treeTypes) {
           new THREE.Vector3(pos.x - 1.5, 0, pos.z - 1.5),
           new THREE.Vector3(pos.x + 1.5, 8, pos.z + 1.5)
         );
-      } else if (treeType.file.includes("oak_tree")) {
+      } 
+      else if (treeType.file.includes("oak_tree")) {
         // Ukuran untuk oak_tree.glb setelah scale 0.5
         box = new THREE.Box3(
           new THREE.Vector3(pos.x - 2.0, 0, pos.z - 2.0),
           new THREE.Vector3(pos.x + 2.0, 9, pos.z + 2.0)
         );
-      } else {
+      }
+       else {
         // Fallback ke bounding box dari objek
         box = new THREE.Box3().setFromObject(tree);
       }
