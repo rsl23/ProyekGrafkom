@@ -74,7 +74,7 @@ for (let i = -gridSize / 2; i < gridSize / 2; i++) {
 
 // Remove the original large floor
 scene.remove(floor);
-
+const graveCollisionBoxes = [];
 // Add corpse at spawn position
 const corpseLoader = new GLTFLoader();
 corpseLoader.load(
@@ -191,7 +191,7 @@ fenceLoader.load(
 );
 
 // Tambahkan array global untuk menyimpan bounding box grave
-const graveCollisionBoxes = [];
+
 
 const graveyardLoader = new GLTFLoader();
 graveyardLoader.load(
@@ -215,7 +215,6 @@ graveyardLoader.load(
         graveInstance.position.set(startX + j * xStep, 0, startZ + i * zStep);
         graveInstance.rotation.y = Math.random() * Math.PI * 2;
         graveInstance.scale.set(0.5, 0.5, 0.5);
-        // Aktifkan shadow pada semua mesh di kuburan
         graveInstance.traverse((child) => {
           if (child.isMesh) {
             child.castShadow = true;
@@ -232,8 +231,9 @@ graveyardLoader.load(
           scene.add(graveInstance);
           // Buat bounding box dan expand sumbu Y agar mencakup posisi pemain (misal sampai y=2)
           const box = new THREE.Box3().setFromObject(graveInstance);
-          box.expandByVector(new THREE.Vector3(0, 2, 0));
+          box.expandByVector(new THREE.Vector3(0.2, 0.5, 0.2));
           graveCollisionBoxes.push(box);
+          collisionBoxes.push({ box: box, tag: "grave" }); // Tambahkan ke array collisionBoxes
         }
       }
     }
@@ -1502,6 +1502,7 @@ generatorLoader.load(
     // Add collision detection for generator
     const generatorBox = new THREE.Box3().setFromObject(generatorInstance);
     graveCollisionBoxes.push(generatorBox); // Use same collision system as graves
+    collisionBoxes.push({ box: generatorBox, tag: "generator" }); // Tambahkan ke array collisionBoxes
 
     console.log(
       "Generator loaded successfully at position:",
@@ -1554,6 +1555,7 @@ gasolineLoader.load(
       const gasolineBox = new THREE.Box3().setFromObject(gasolineInstance);
       gasolineBox.expandByVector(new THREE.Vector3(0.2, 0.2, 0.2)); // Add small buffer
       graveCollisionBoxes.push(gasolineBox); // Use same collision system as graves
+      collisionBoxes.push({ box: gasolineBox, tag: "gasoline" }); // Tambahkan ke array collisionBoxes
 
       console.log(
         `Fixed Gasoline ${index + 1} placed at position:`,
@@ -1613,6 +1615,7 @@ gasolineLoader.load(
     const randomGasolineBox = new THREE.Box3().setFromObject(randomGasoline);
     randomGasolineBox.expandByVector(new THREE.Vector3(0.2, 0.2, 0.2)); // Add small buffer
     graveCollisionBoxes.push(randomGasolineBox);
+    collisionBoxes.push({ box: randomGasolineBox, tag: "gasoline" }); // Tambahkan ke array collisionBoxes
 
     console.log("Random Gasoline placed at position:", randomGasoline.position);
   },
@@ -1731,6 +1734,7 @@ for (const treeType of treeTypes) {
         box = new THREE.Box3().setFromObject(tree);
       }
       graveCollisionBoxes.push(box);
+      collisionBoxes.push({ box: box, tag: "tree" }); // Tambahkan ke array collisionBoxes
     }
     console.log(`${treeType.file} loaded and placed at filtered positions.`);
   });
@@ -1807,11 +1811,13 @@ roundaboutLoader.load(
     scene.add(roundaboutObject);
 
     // Buat bounding box collision seperti wall
+   
     const roundaboutBox = new THREE.Box3().setFromObject(roundaboutObject);
     // Expand sedikit agar collision lebih nyaman
     roundaboutBox.expandByVector(new THREE.Vector3(0.2, 2, 0.2));
     // Simpan ke array collision box (gunakan sistem graveCollisionBoxes agar handleGraveCollision bisa dipakai)
     graveCollisionBoxes.push(roundaboutBox);
+    collisionBoxes.push({ box: roundaboutBox, tag: "roundabout" }); // Tambahkan ke array collisionBoxes
   },
   undefined,
   (error) => {
@@ -1852,6 +1858,9 @@ roundaboutLoader.load(
 //   });
 //   controls.getObject().position.copy(newPos);
 // }
+
+// --- Tambahkan array global untuk semua collision box dan tag objek ---
+const collisionBoxes = [];
 
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
@@ -1894,6 +1903,9 @@ function animate() {
       cursorDot.style.width = "6px";
       cursorDot.style.height = "6px";
     }
+
+    // Handle all collisions
+    handleAllCollision(previousPos);
   }
   updateFlashlight();
 
@@ -2025,6 +2037,7 @@ streetLampLoader.load(
 
       const lampBox = new THREE.Box3().setFromObject(lampInstance);
       graveCollisionBoxes.push(lampBox); // Use same collision system as graves
+      collisionBoxes.push({ box: lampBox, tag: "lamp" }); // Tambahkan ke array collisionBoxes
 
       console.log(`Street lamp added at position (${pos.x}, ${pos.z})`);
     });
@@ -2039,6 +2052,66 @@ streetLampLoader.load(
 
 // Tambahkan roundabout ke map
 
+let timerDuration = 120; // 2 menit dalam detik
+let timerRemaining = timerDuration;
+let timerInterval = null;
+let timerEnded = false;
+
+// Buat elemen UI untuk timer
+const timerElement = document.createElement("div");
+timerElement.id = "gameTimer";
+timerElement.style.position = "absolute";
+timerElement.style.top = "20px";
+timerElement.style.left = "20px";
+timerElement.style.padding = "10px 24px";
+timerElement.style.backgroundColor = "rgba(0,0,0,0.85)";
+timerElement.style.color = "#ffcc00";
+timerElement.style.fontFamily = "Arial, sans-serif";
+timerElement.style.fontSize = "32px";
+timerElement.style.fontWeight = "bold";
+timerElement.style.borderRadius = "8px";
+timerElement.style.border = "2px solid #ffcc00";
+timerElement.style.boxShadow = "0 0 10px rgba(255,204,0,0.4)";
+timerElement.style.zIndex = "2001";
+timerElement.style.textShadow = "0 0 8px #000, 0 0 2px #ffcc00";
+timerElement.innerHTML = formatTimer(timerRemaining);
+document.body.appendChild(timerElement);
+
+function formatTimer(seconds) {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+  return `⏰ ${m}:${s}`;
+}
+
+function startGameTimer() {
+  timerInterval = setInterval(() => {
+    if (timerEnded) return;
+
+    // Cek apakah generator sudah menyala
+    if (generatorStatus[0]) {
+      clearInterval(timerInterval);
+      timerEnded = true;
+      timerElement.innerHTML = "✅ Anda berhasil lolos!";
+      return;
+    }
+
+    timerRemaining--;
+    timerElement.innerHTML = formatTimer(timerRemaining);
+
+    if (timerRemaining <= 0) {
+      timerElement.innerHTML = '⏰ 00:00';
+      timerEnded = true;
+      clearInterval(timerInterval);
+
+      if (!generatorStatus[0]) {
+        showGameOver();
+      }
+    }
+  }, 1000);
+}
+
+// Mulai timer saat game dimulai
+startGameTimer();
 
 // Function to trigger jumpscare and game over
 function triggerJumpscare() {
@@ -2262,4 +2335,40 @@ function handleRoundaboutCollision(previousPos) {
           controls.getObject().position.copy(previousPos);
         }
     }
+}
+
+// Fungsi universal untuk handle collision dan log objek
+function handleAllCollision(previousPos) {
+  const playerPos = controls.getObject().position;
+  const newPos = playerPos.clone();
+  let collidedTag = null;
+  collisionBoxes.forEach((item) => {
+    const box = item.box;
+    if (
+      newPos.x >= box.min.x &&
+      newPos.x <= box.max.x &&
+      newPos.z >= box.min.z &&
+      newPos.z <= box.max.z
+    ) {
+      collidedTag = item.tag;
+      // Resolusi sliding (opsional, bisa disesuaikan)
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      const halfSizeX = (box.max.x - box.min.x) / 2;
+      const halfSizeZ = (box.max.z - box.min.z) / 2;
+      const dx = newPos.x - center.x;
+      const dz = newPos.z - center.z;
+      const overlapX = halfSizeX - Math.abs(dx);
+      const overlapZ = halfSizeZ - Math.abs(dz);
+      if (overlapX < overlapZ) {
+        newPos.x = previousPos.x;
+      } else {
+        newPos.z = previousPos.z;
+      }
+    }
+  });
+  if (collidedTag) {
+    console.log(`Player sedang menabrak ${collidedTag}`);
+  }
+  controls.getObject().position.copy(newPos);
 }

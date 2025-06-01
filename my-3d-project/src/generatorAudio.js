@@ -33,10 +33,10 @@ export function initAudioSystem(audioListener) {
 
   // Try to load the startup sound
   const startupPaths = [
-    "./public/generator_startup.mp3",
-    "/public/generator_startup.mp3",
-    "generator_startup.mp3",
-    "./generator_startup.mp3",
+    "./public/suara_generator.mp3",
+    "/public/suara_generator.mp3",
+    "suara_generator.mp3",
+    "./suara_generator.mp3",
   ];
 
   tryLoadAudio(possiblePaths, audioListener);
