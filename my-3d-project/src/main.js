@@ -1090,26 +1090,24 @@ document.addEventListener("keydown", (e) => {
         // Update status in the audio system
         if (isAudioSystemReady()) {
           audioSystem.setGeneratorStatus(index, true);
-        }
-
-        // Visual feedback animation for the prompt
+        } // Visual feedback animation for the prompt
         promptElement.style.transform = "translateX(-50%) scale(1.1)";
         promptElement.style.border = "2px solid #00ff00";
         promptElement.style.boxShadow = "0 0 15px rgba(0, 255, 0, 0.6)";
         promptElement.innerHTML =
-          '<span style="color: #00ff00;">[E]</span> Generator Aktif';
+          '<span style="color: #00ff00;">✓</span> Generator Aktif - YOU ESCAPED!';
 
-        console.log(`Generator diaktifkan!`);
+        console.log(`Generator diaktifkan! Player has escaped!`);
 
-        // Reset visual style after feedback
+        // Keep the victory message visible
         setTimeout(() => {
           if (generatorStatus[index]) {
-            promptElement.style.border = "2px solid #ff6600";
-            promptElement.style.boxShadow = "0 0 15px rgba(255, 102, 0, 0.4)";
+            promptElement.style.transform = "translateX(-50%) scale(1.05)";
+            promptElement.style.border = "2px solid #00ff00";
+            promptElement.style.boxShadow = "0 0 15px rgba(0, 255, 0, 0.6)";
             promptElement.innerHTML =
-              '<span style="color: #ff6600;">[E]</span> Nonaktifkan Generator';
+              '<span style="color: #00ff00;">✓</span> YOU ESCAPED!';
           }
-          promptElement.style.transform = "translateX(-50%) scale(0.95)";
         }, 1000);
       } else if (gasolineCollected >= 1 && !generatorFilled) {
         // Directly fill generator
@@ -2099,6 +2097,12 @@ function startGameTimer() {
       clearInterval(timerInterval);
       timerEnded = true;
       timerElement.innerHTML = "✅ Anda berhasil lolos!";
+
+      // Show victory screen after a short delay
+      setTimeout(() => {
+        showYouEscaped();
+      }, 1500);
+
       return;
     }
 
@@ -2327,6 +2331,116 @@ function showGameOver() {
     gameOverSound.setLoop(true);
     gameOverSound.setVolume(0.3);
     gameOverSound.play();
+  });
+}
+
+// Function to show "You Escaped" screen when player wins
+function showYouEscaped() {
+  // Calculate the time played (timerDuration - timerRemaining)
+  const timePlayed = timerDuration - timerRemaining;
+  const minutes = Math.floor(timePlayed / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = Math.floor(timePlayed % 60)
+    .toString()
+    .padStart(2, "0");
+
+  // Create win screen
+  const escapeScreen = document.createElement("div");
+  escapeScreen.id = "escapeScreen";
+  escapeScreen.style.position = "fixed";
+  escapeScreen.style.top = "0";
+  escapeScreen.style.left = "0";
+  escapeScreen.style.width = "100%";
+  escapeScreen.style.height = "100%";
+  escapeScreen.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
+  escapeScreen.style.color = "#00ff00"; // Green color for winning
+  escapeScreen.style.display = "flex";
+  escapeScreen.style.flexDirection = "column";
+  escapeScreen.style.justifyContent = "center";
+  escapeScreen.style.alignItems = "center";
+  escapeScreen.style.zIndex = "3000";
+  escapeScreen.style.fontFamily = "Arial, sans-serif";
+
+  // Create "You Escaped" text
+  const escapeText = document.createElement("h1");
+  escapeText.innerHTML = "YOU ESCAPED";
+  escapeText.style.fontSize = "72px";
+  escapeText.style.marginBottom = "30px";
+  escapeText.style.textShadow = "0 0 20px #00ff00";
+  escapeText.style.animation = "pulse 2s infinite";
+
+  // Show play time
+  const timeText = document.createElement("h2");
+  timeText.innerHTML = `Time: ${minutes}:${seconds}`;
+  timeText.style.fontSize = "36px";
+  timeText.style.marginBottom = "30px";
+  timeText.style.color = "#ffffff";
+
+  // Create restart button
+  const restartButton = document.createElement("button");
+  restartButton.innerHTML = "Play Again";
+  restartButton.style.padding = "15px 30px";
+  restartButton.style.fontSize = "24px";
+  restartButton.style.backgroundColor = "#00ff00";
+  restartButton.style.color = "black";
+  restartButton.style.border = "none";
+  restartButton.style.borderRadius = "5px";
+  restartButton.style.cursor = "pointer";
+  restartButton.style.fontWeight = "bold";
+  restartButton.style.margin = "20px";
+  restartButton.style.transition = "all 0.3s";
+
+  // Hover effect for button
+  restartButton.onmouseover = function () {
+    this.style.backgroundColor = "#ffffff";
+  };
+  restartButton.onmouseout = function () {
+    this.style.backgroundColor = "#00ff00";
+  };
+
+  // Restart game when button is clicked
+  restartButton.onclick = function () {
+    location.reload();
+  };
+
+  // Add pulse animation for win text if not already defined
+  if (!document.getElementById("pulseKeyframes")) {
+    const style = document.createElement("style");
+    style.id = "pulseKeyframes";
+    style.innerHTML = `
+      @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // Add elements to win screen
+  escapeScreen.appendChild(escapeText);
+  escapeScreen.appendChild(timeText);
+  escapeScreen.appendChild(restartButton);
+  document.body.appendChild(escapeScreen);
+
+  // Unlock controls to allow interaction with the win screen
+  controls.unlock();
+
+  // Stop all animations and sounds
+  cancelAnimationFrame(animationFrameId);
+  if (backgroundSound && backgroundSound.isPlaying) {
+    backgroundSound.stop();
+  }
+
+  // Play victory ambient sound
+  const victorySound = new THREE.Audio(audioListener);
+  const soundLoader = new THREE.AudioLoader();
+  soundLoader.load("./public/horror atmosphere.mp3", function (buffer) {
+    victorySound.setBuffer(buffer);
+    victorySound.setLoop(true);
+    victorySound.setVolume(0.3);
+    victorySound.play();
   });
 }
 
