@@ -1,12 +1,7 @@
-// Import Three.js
 import * as THREE from "three";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { initAudioSystem } from "./generatorAudio.js";
-
-// Inisialisasi variable untuk tracking animation frame and jumpscare
-let animationFrameId;
-window.jumpscareTriggered = false; // Flag untuk memastikan jumpscare hanya terjadi sekali
 
 const canvas = document.getElementById("bg");
 const renderer = new THREE.WebGLRenderer({ canvas });
@@ -14,7 +9,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x212121);
+scene.background = new THREE.Color(0x000000);
 
 // Camera
 const camera = new THREE.PerspectiveCamera(
@@ -100,8 +95,8 @@ corpseLoader.load(
 
 // Ubah batas map menjadi lebih kecil
 const mapBoundary = 30; // Map dari -30 sampai 30 pada sumbu x dan z
-const fenceHeight = 2;
-const fenceLength = 3;
+const fenceHeight = 1;
+const fenceLength = 1;
 const fenceModelScale = 1;
 
 const adjustedFenceHeight = fenceHeight * fenceModelScale;
@@ -117,7 +112,7 @@ fenceLoader.load(
   "./public/brick_and_stone_wall.glb",
   (gltf) => {
     const fenceModel = gltf.scene; // North side
-    for (let i = 0; i <= segmentCount + 2; i = i + 3) {
+    for (let i = 0; i <= segmentCount + 2; i = i + 2) {
       const x = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -145,7 +140,7 @@ fenceLoader.load(
     scene.add(northHalfSegment);
 
     // South side
-    for (let i = -3; i < segmentCount; i = i + 3) {
+    for (let i = -4; i < segmentCount; i = i + 2) {
       const x = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -158,7 +153,7 @@ fenceLoader.load(
     }
 
     // East side
-    for (let i = 0; i <= segmentCount + 4; i = i + 3) {
+    for (let i = 0; i <= segmentCount + 2; i = i + 2) {
       const z = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -170,7 +165,7 @@ fenceLoader.load(
       segment.position.set(mapBoundary, adjustedFenceHeight / 2, z);
       scene.add(segment);
     } // West side
-    for (let i = -3; i <= segmentCount + 3; i = i + 3) {
+    for (let i = -2; i <= segmentCount + 2; i = i + 2) {
       const z = -mapBoundary + i * step + step / 2;
       const segment = fenceModel.clone();
       segment.scale.set(
@@ -447,7 +442,7 @@ let generatorFilled = false;
 let generatorFilledAmount = 0;
 
 // Flashlight dimming variables
-const dimmingDuration = 50; // Durasi dimming (detik)
+const dimmingDuration = 20; // Durasi dimming (detik)
 const maxIntensity = 3; // Intensitas maksimum
 const minIntensity = 0; // Intensitas minimum (mati)
 let dimmingStartTime = Date.now(); // Waktu mulai dimming
@@ -456,8 +451,6 @@ let isRecharging = false; // Status recharging
 const rechargeDuration = 5; // Durasi recharge (detik)
 let rechargeStartTime = 0; // Waktu mulai recharge
 let currentFlashlightIntensity = maxIntensity; // Intensitas awal
-let lastBatteryLevel = 1.0; // Track battery level when flashlight is turned off
-let elapsedDimmingTime = 0; // Track elapsed dimming time when flashlight is turned off
 
 // Add F key for toggling flashlight
 document.addEventListener("keydown", (e) => {
@@ -478,25 +471,17 @@ document.addEventListener("keydown", (e) => {
 
     flashlightOn = !flashlightOn;
     if (flashlightOn) {
-      // When turning back on, use the saved battery level
+      // Reset dimming when turning on
+      dimmingStartTime = Date.now();
       isDimming = true;
       isRecharging = false;
-
-      // Calculate how much time has already passed (in seconds) for dimming
-      const remainingPercentage = lastBatteryLevel;
-      elapsedDimmingTime = dimmingDuration * (1 - remainingPercentage);
-
-      // Set the new dimming start time based on the elapsed time
-      dimmingStartTime = Date.now() - elapsedDimmingTime * 1000;
-
-      // Set the correct intensity based on the saved battery level
-      currentFlashlightIntensity = maxIntensity * remainingPercentage;
+      currentFlashlightIntensity = maxIntensity;
 
       flashlight.intensity = currentFlashlightIntensity;
       flashlightBulb.intensity = currentFlashlightIntensity / 6; // Bulb is dimmer than spotlight
 
-      // Update battery UI with the saved level
-      updateBatteryUI(lastBatteryLevel);
+      // Update battery UI
+      updateBatteryUI(1.0);
 
       // Remove any existing warning
       const lowBatteryWarning = document.getElementById("lowBatteryWarning");
@@ -504,13 +489,6 @@ document.addEventListener("keydown", (e) => {
         lowBatteryWarning.remove();
       }
     } else {
-      // Save current battery level when turning off
-      if (isDimming) {
-        lastBatteryLevel =
-          1 - (Date.now() - dimmingStartTime) / 1000 / dimmingDuration;
-        lastBatteryLevel = Math.max(0, Math.min(1, lastBatteryLevel)); // Clamp between 0 and 1
-      }
-
       flashlight.intensity = 0;
       flashlightBulb.intensity = 0;
 
@@ -606,12 +584,41 @@ function updateFlashlight() {
       currentFlashlightIntensity = minIntensity;
       flashlightOn = false; // Force flashlight to remain off
 
-      // Check if jumpscare has already been triggered
-      if (!window.jumpscareTriggered) {
-        window.jumpscareTriggered = true;
+      // Show permanent "Baterai Habis!" message
+      let lowBatteryWarning = document.getElementById("lowBatteryWarning");
+      if (!lowBatteryWarning) {
+        lowBatteryWarning = document.createElement("div");
+        lowBatteryWarning.id = "lowBatteryWarning";
+        lowBatteryWarning.innerHTML = "Baterai Habis!";
+        lowBatteryWarning.style.position = "absolute";
+        lowBatteryWarning.style.top = "10%";
+        lowBatteryWarning.style.left = "50%";
+        lowBatteryWarning.style.transform = "translateX(-50%)";
+        lowBatteryWarning.style.color = "#ff3300";
+        lowBatteryWarning.style.fontFamily = "Arial, sans-serif";
+        lowBatteryWarning.style.fontSize = "24px";
+        lowBatteryWarning.style.fontWeight = "bold";
+        lowBatteryWarning.style.textShadow = "0 0 5px rgba(255, 51, 0, 0.7)";
+        lowBatteryWarning.style.padding = "10px";
+        lowBatteryWarning.style.borderRadius = "5px";
+        lowBatteryWarning.style.zIndex = "1000";
+        lowBatteryWarning.style.animation = "pulseWarning 2s infinite";
 
-        // Trigger jumpscare
-        triggerJumpscare();
+        // Add animation keyframes for warning if they don't exist
+        if (!document.getElementById("warningKeyframes")) {
+          const style = document.createElement("style");
+          style.id = "warningKeyframes";
+          style.innerHTML = `
+            @keyframes pulseWarning {
+              0% { opacity: 1; text-shadow: 0 0 5px rgba(255, 51, 0, 0.7); }
+              50% { opacity: 0.7; text-shadow: 0 0 15px rgba(255, 51, 0, 0.9); }
+              100% { opacity: 1; text-shadow: 0 0 5px rgba(255, 51, 0, 0.7); }
+            }
+          `;
+          document.head.appendChild(style);
+        }
+
+        document.body.appendChild(lowBatteryWarning);
       }
     } // Update flashlight and bulb intensities
     flashlight.intensity = currentFlashlightIntensity;
@@ -1587,8 +1594,7 @@ function isFarFromImportant(pos, minDist = 10) {
 function generateTreePositions(count, mapBoundary, minDist = 10) {
   const positions = [];
   let attempts = 0;
-  while (positions.length < count && attempts < 2000) {
-    // Meningkatkan jumlah percobaan maksimum
+  while (positions.length < count && attempts < 1000) {
     const x = Math.round((Math.random() * 2 - 1) * (mapBoundary - 3));
     const z = Math.round((Math.random() * 2 - 1) * (mapBoundary - 3));
     const pos = { x, z };
@@ -1596,8 +1602,7 @@ function generateTreePositions(count, mapBoundary, minDist = 10) {
       // Also avoid too close to other trees
       let tooClose = false;
       for (const t of positions) {
-        if (Math.sqrt((t.x - x) ** 2 + (t.z - z) ** 2) < minDist * 0.75) {
-          // Mengurangi faktor jarak minimum antar pohon
+        if (Math.sqrt((t.x - x) ** 2 + (t.z - z) ** 2) < minDist * 0.8) {
           tooClose = true;
           break;
         }
@@ -1612,21 +1617,15 @@ function generateTreePositions(count, mapBoundary, minDist = 10) {
 const treeTypes = [
   {
     file: "./public/ancient_tree.glb",
-    count: 30,
-    scale: [0.01, 0.02, 0.01],
-    positions: generateTreePositions(60, mapBoundary, 10), // Meningkatkan jumlah pohon, mengurangi jarak minimum
+    count: 40,
+    scale: [0.01, 0.01, 0.01],
+    positions: generateTreePositions(20, mapBoundary, 12),
   },
   {
     file: "./public/tree_1.glb",
-    count: 20,
-    scale: [0.7, 0.9, 0.7],
-    positions: generateTreePositions(60, mapBoundary, 8), // Meningkatkan jumlah pohon, mengurangi jarak minimum
-  },
-  {
-    file: "./public/oak_tree.glb", // Menambah jenis pohon baru (oak_tree)
-    count: 30,
-    scale: [0.5, 0.6, 0.5], // Skala yang sesuai untuk oak_tree
-    positions: generateTreePositions(40, mapBoundary, 9),
+    count: 40,
+    scale: [0.7, 0.7, 0.7],
+    positions: generateTreePositions(20, mapBoundary, 10),
   },
 ];
 
@@ -1639,7 +1638,8 @@ for (const treeType of treeTypes) {
       const tree = gltf.scene.clone();
       tree.position.set(pos.x, 0, pos.z);
       tree.scale.set(...treeType.scale);
-      scene.add(tree); // Collision box presisi sesuai scale tree
+      scene.add(tree);
+      // Collision box presisi sesuai scale tree
       let box;
       if (treeType.file.includes("ancient_tree")) {
         // Ukuran asli ancient_tree.glb setelah scale 0.01
@@ -1652,12 +1652,6 @@ for (const treeType of treeTypes) {
         box = new THREE.Box3(
           new THREE.Vector3(pos.x - 1.5, 0, pos.z - 1.5),
           new THREE.Vector3(pos.x + 1.5, 8, pos.z + 1.5)
-        );
-      } else if (treeType.file.includes("oak_tree")) {
-        // Ukuran untuk oak_tree.glb setelah scale 0.5
-        box = new THREE.Box3(
-          new THREE.Vector3(pos.x - 2.0, 0, pos.z - 2.0),
-          new THREE.Vector3(pos.x + 2.0, 9, pos.z + 2.0)
         );
       } else {
         // Fallback ke bounding box dari objek
@@ -1724,7 +1718,7 @@ function checkGasolineProximity() {
 
 // Update animate function to include jump handling, stairs collision handling, fence collision handling, and grave collision handling
 function animate() {
-  animationFrameId = requestAnimationFrame(animate);
+  requestAnimationFrame(animate);
   const delta = clock.getDelta();
   const speed = 5 * delta;
   if (controls.isLocked) {
@@ -1905,213 +1899,3 @@ streetLampLoader.load(
     console.error("Error loading street lamp asset:", error);
   }
 );
-
-// Function to trigger jumpscare and game over
-function triggerJumpscare() {
-  console.log("Triggering jumpscare and game over");
-
-  // Create full-screen overlay for the jumpscare
-  const jumpscareOverlay = document.createElement("div");
-  jumpscareOverlay.id = "jumpscareOverlay";
-  jumpscareOverlay.style.position = "fixed";
-  jumpscareOverlay.style.top = "0";
-  jumpscareOverlay.style.left = "0";
-  jumpscareOverlay.style.width = "100%";
-  jumpscareOverlay.style.height = "100%";
-  jumpscareOverlay.style.backgroundColor = "black";
-  jumpscareOverlay.style.zIndex = "2000";
-  jumpscareOverlay.style.display = "flex";
-  jumpscareOverlay.style.justifyContent = "center";
-  jumpscareOverlay.style.alignItems = "center";
-  jumpscareOverlay.style.transition = "background-color 2s";
-  document.body.appendChild(jumpscareOverlay);
-
-  // Play jumpscare sound
-  const jumpscareSound = new THREE.Audio(audioListener);
-  const soundLoader = new THREE.AudioLoader();
-  soundLoader.load(
-    "./public/heartbeat.mp3", // Using heartbeat sound for jumpscare
-    function (buffer) {
-      jumpscareSound.setBuffer(buffer);
-      jumpscareSound.setVolume(1.0);
-      jumpscareSound.play();
-    }
-  );
-
-  // Load jumpscare model
-  const jumpscareLoader = new GLTFLoader();
-  jumpscareLoader.load("./public/jumpscare.glb", function (gltf) {
-    // Create a camera for rendering the jumpscare
-    const jumpscareCamera = new THREE.PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-
-    // Create a separate scene for the jumpscare
-    const jumpscareScene = new THREE.Scene();
-
-    // Add dramatic lighting to jumpscare scene
-    const redLight = new THREE.PointLight(0xff0000, 5, 100);
-    redLight.position.set(0, 5, 10);
-    jumpscareScene.add(redLight); // Set up the jumpscare model
-    const jumpscareModel = gltf.scene;
-    jumpscareModel.position.set(0, 0, -10); // Posisikan lebih jauh agar bisa "mendekat" ke pemain
-    jumpscareModel.scale.set(5, 5, 5); // Perbesar skalanya untuk efek yang lebih mengerikan
-    jumpscareScene.add(jumpscareModel);
-
-    // Render the jumpscare to a canvas
-    const jumpscareCanvas = document.createElement("canvas");
-    jumpscareCanvas.width = window.innerWidth;
-    jumpscareCanvas.height = window.innerHeight;
-    jumpscareCanvas.style.width = "100%";
-    jumpscareCanvas.style.height = "100%";
-    jumpscareCanvas.style.position = "absolute";
-    jumpscareCanvas.style.top = "0";
-    jumpscareCanvas.style.left = "0";
-    jumpscareCanvas.style.opacity = "0";
-    jumpscareCanvas.style.transition = "opacity 0.2s";
-
-    // Create renderer for jumpscare
-    const jumpscareRenderer = new THREE.WebGLRenderer({
-      canvas: jumpscareCanvas,
-      alpha: true,
-    });
-    jumpscareRenderer.setSize(window.innerWidth, window.innerHeight);
-
-    // Add canvas to overlay
-    jumpscareOverlay.appendChild(jumpscareCanvas); // Create animation for jumpscare
-    setTimeout(() => {
-      // Flash the screen
-      jumpscareOverlay.style.backgroundColor = "white";
-
-      setTimeout(() => {
-        // Layar menjadi hitam pekat terlebih dahulu
-        jumpscareOverlay.style.backgroundColor = "black";
-
-        // Tunggu beberapa saat kemudian baru munculkan jumpscare
-        setTimeout(() => {
-          jumpscareOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-          jumpscareCanvas.style.opacity = "1";
-
-          // Animate the jumpscare model
-          function animateJumpscare() {
-            requestAnimationFrame(animateJumpscare);
-
-            // Move the jumpscare model closer dengan gerakan yang lebih agresif
-            if (jumpscareModel.position.z < 3) {
-              // Gerakan maju semakin cepat saat mendekati kamera
-              const speedMultiplier = 1 + (3 - jumpscareModel.position.z) * 0.2;
-              jumpscareModel.position.z += 0.3 * speedMultiplier;
-            }
-
-            // Randomly rotate the model for creepy effect
-            jumpscareModel.rotation.y += Math.sin(Date.now() * 0.008) * 0.1; // Rotasi lebih cepat
-            jumpscareModel.rotation.x += Math.sin(Date.now() * 0.005) * 0.05; // Rotasi lebih intens
-
-            // Render jumpscare scene
-            jumpscareRenderer.render(jumpscareScene, jumpscareCamera);
-          }
-          animateJumpscare();
-
-          // Show game over screen after jumpscare
-          setTimeout(showGameOver, 3000);
-        }, 1500); // Waktu untuk menampilkan model jumpscare setelah layar hitam (diperpanjang menjadi 1.5 detik)
-      }, 100);
-    }, 500);
-  });
-}
-
-// Function to show game over screen
-function showGameOver() {
-  // Create game over screen
-  const gameOverScreen = document.createElement("div");
-  gameOverScreen.id = "gameOverScreen";
-  gameOverScreen.style.position = "fixed";
-  gameOverScreen.style.top = "0";
-  gameOverScreen.style.left = "0";
-  gameOverScreen.style.width = "100%";
-  gameOverScreen.style.height = "100%";
-  gameOverScreen.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
-  gameOverScreen.style.color = "#ff0000";
-  gameOverScreen.style.display = "flex";
-  gameOverScreen.style.flexDirection = "column";
-  gameOverScreen.style.justifyContent = "center";
-  gameOverScreen.style.alignItems = "center";
-  gameOverScreen.style.zIndex = "3000";
-  gameOverScreen.style.fontFamily = "Arial, sans-serif";
-
-  // Create game over text
-  const gameOverText = document.createElement("h1");
-  gameOverText.innerHTML = "GAME OVER";
-  gameOverText.style.fontSize = "72px";
-  gameOverText.style.marginBottom = "30px";
-  gameOverText.style.textShadow = "0 0 20px #ff0000";
-  gameOverText.style.animation = "pulse 2s infinite";
-
-  // Create restart button
-  const restartButton = document.createElement("button");
-  restartButton.innerHTML = "Try Again";
-  restartButton.style.padding = "15px 30px";
-  restartButton.style.fontSize = "24px";
-  restartButton.style.backgroundColor = "#ff0000";
-  restartButton.style.color = "black";
-  restartButton.style.border = "none";
-  restartButton.style.borderRadius = "5px";
-  restartButton.style.cursor = "pointer";
-  restartButton.style.fontWeight = "bold";
-  restartButton.style.margin = "20px";
-  restartButton.style.transition = "all 0.3s";
-
-  // Hover effect for button
-  restartButton.onmouseover = function () {
-    this.style.backgroundColor = "#ffffff";
-  };
-  restartButton.onmouseout = function () {
-    this.style.backgroundColor = "#ff0000";
-  };
-
-  // Restart game when button is clicked
-  restartButton.onclick = function () {
-    location.reload();
-  };
-
-  // Add pulse animation for game over text
-  if (!document.getElementById("pulseKeyframes")) {
-    const style = document.createElement("style");
-    style.id = "pulseKeyframes";
-    style.innerHTML = `
-      @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  // Add elements to game over screen
-  gameOverScreen.appendChild(gameOverText);
-  gameOverScreen.appendChild(restartButton);
-  document.body.appendChild(gameOverScreen);
-
-  // Unlock controls to allow interaction with the game over screen
-  controls.unlock();
-
-  // Stop all animations and sounds
-  cancelAnimationFrame(animationFrameId);
-  if (backgroundSound && backgroundSound.isPlaying) {
-    backgroundSound.stop();
-  }
-
-  // Play low ambient sound for game over screen
-  const gameOverSound = new THREE.Audio(audioListener);
-  const soundLoader = new THREE.AudioLoader();
-  soundLoader.load("./public/horror atmosphere.mp3", function (buffer) {
-    gameOverSound.setBuffer(buffer);
-    gameOverSound.setLoop(true);
-    gameOverSound.setVolume(0.3);
-    gameOverSound.play();
-  });
-}
